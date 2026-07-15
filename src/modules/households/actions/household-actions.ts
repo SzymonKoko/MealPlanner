@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import { addDays } from "date-fns";
 import { requireAuth } from "@/server/require-auth";
-import { requireHouseholdEditor, requireHouseholdMember } from "@/server/require-household-member";
+import { requireHouseholdEditor } from "@/server/require-household-member";
 import { createHouseholdSchema, inviteMemberSchema, acceptInviteSchema } from "../validators/household-schemas";
 import {
   createHouseholdRecord,
@@ -22,9 +23,8 @@ export async function createHousehold(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  const household = await createHouseholdRecord(parsed.data.name, user.id);
+  await createHouseholdRecord(parsed.data.name, user.id);
   revalidatePath("/", "layout");
-  return { householdId: household.id };
 }
 
 export async function inviteMember(formData: FormData) {
@@ -40,7 +40,7 @@ export async function inviteMember(formData: FormData) {
 
   const { user } = await requireHouseholdEditor(parsed.data.householdId);
   const token = uuidv4();
-  const invite = await createInvite(
+  await createInvite(
     parsed.data.householdId,
     user.id,
     token,
@@ -49,8 +49,7 @@ export async function inviteMember(formData: FormData) {
     parsed.data.email,
   );
 
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  return { inviteUrl: `${appUrl}/invite/${invite.token}` };
+  revalidatePath("/more");
 }
 
 export async function acceptInvite(token: string) {
@@ -72,5 +71,17 @@ export async function acceptInvite(token: string) {
 
   await acceptInviteRecord(invite.id, invite.householdId, user.id, invite.role);
   revalidatePath("/", "layout");
-  return { householdId: invite.householdId };
+}
+
+export async function acceptInviteAction(token: string) {
+  await acceptInvite(token);
+  redirect("/today");
+}
+
+export async function acceptInviteFormAction(formData: FormData) {
+  const token = formData.get("token");
+  if (!token || typeof token !== "string") {
+    throw new AppError("Brak tokenu zaproszenia", "VALIDATION_ERROR");
+  }
+  await acceptInviteAction(token);
 }

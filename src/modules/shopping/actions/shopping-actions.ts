@@ -30,14 +30,13 @@ export async function generateShoppingListAction(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  const result = await generateShoppingList(
+  await generateShoppingList(
     householdId,
     parsed.data.name,
     parsed.data.dateFrom,
     parsed.data.dateTo,
   );
   revalidatePath("/shopping");
-  return result;
 }
 
 export async function addManualShoppingItemAction(formData: FormData) {

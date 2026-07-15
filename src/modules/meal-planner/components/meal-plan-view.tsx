@@ -64,7 +64,7 @@ export function MealPlanView({
   recipes,
   members,
 }: MealPlanViewProps) {
-  const [entries, setEntries] = useState(initialEntries);
+  const [entries] = useState(initialEntries);
   const [assignments] = useState(initialAssignments);
   const [selectedDay, setSelectedDay] = useState(weekStart);
   const [moveEntryId, setMoveEntryId] = useState<string | null>(null);

@@ -5,7 +5,7 @@ import { generateShoppingListAction } from "@/modules/shopping/actions/shopping-
 import { formatDateISO, getWeekStart, getWeekEnd } from "@/lib/dates";
 import { ShoppingListView } from "@/modules/shopping/components/shopping-list-view";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default async function ShoppingPage() {
   const { householdId } = await requireActiveHousehold();

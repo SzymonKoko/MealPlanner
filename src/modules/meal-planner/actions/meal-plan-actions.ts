@@ -37,10 +37,9 @@ export async function addMealPlanEntryAction(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  const entry = await createMealPlanEntry(householdId, user.id, parsed.data);
+  await createMealPlanEntry(householdId, user.id, parsed.data);
   revalidatePath("/plan");
   revalidatePath("/today");
-  return entry;
 }
 
 export async function moveMealPlanEntryAction(formData: FormData) {

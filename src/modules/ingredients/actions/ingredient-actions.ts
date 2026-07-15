@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireActiveHousehold, requireHouseholdEditor } from "@/server/require-household-member";
+import { requireActiveHousehold } from "@/server/require-household-member";
 import { ingredientSchema, productSchema, categorySchema } from "../validators/ingredient-schemas";
 import {
   createIngredient,
@@ -31,9 +31,9 @@ export async function createIngredientAction(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  const ingredient = await createIngredient(householdId, user.id, parsed.data);
+  const { tagIds, ...data } = parsed.data;
+  await createIngredient(householdId, user.id, data, tagIds);
   revalidatePath("/ingredients");
-  return ingredient;
 }
 
 export async function updateIngredientAction(id: string, formData: FormData) {
@@ -54,7 +54,8 @@ export async function updateIngredientAction(id: string, formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  await updateIngredient(householdId, id, parsed.data);
+  const { tagIds, ...data } = parsed.data;
+  await updateIngredient(householdId, id, data, tagIds);
   revalidatePath("/ingredients");
 }
 
@@ -84,9 +85,8 @@ export async function createProductAction(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  const product = await createProduct(householdId, parsed.data);
+  await createProduct(householdId, parsed.data);
   revalidatePath("/ingredients");
-  return product;
 }
 
 export async function createCategoryAction(formData: FormData) {

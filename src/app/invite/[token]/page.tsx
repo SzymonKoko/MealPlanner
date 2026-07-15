@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { acceptInvite } from "@/modules/households/actions/household-actions";
+import { acceptInviteFormAction } from "@/modules/households/actions/household-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -17,13 +16,8 @@ export default async function InvitePage({ params }: InvitePageProps) {
           <CardTitle>Zaproszenie do gospodarstwa</CardTitle>
         </CardHeader>
         <CardContent>
-          <form
-            action={async () => {
-              "use server";
-              const result = await acceptInvite(token);
-              redirect("/today");
-            }}
-          >
+          <form action={acceptInviteFormAction}>
+            <input type="hidden" name="token" value={token} />
             <Button type="submit" className="w-full">
               Dołącz do gospodarstwa
             </Button>

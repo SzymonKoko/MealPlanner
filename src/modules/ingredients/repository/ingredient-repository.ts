@@ -5,7 +5,6 @@ import {
   categories,
   tags,
   ingredientTags,
-  productTags,
 } from "@/db/schema";
 import { and, eq, ilike, isNull, inArray } from "drizzle-orm";
 
@@ -41,10 +40,15 @@ export async function getIngredient(householdId: string, id: string) {
   return ingredient ?? null;
 }
 
+type IngredientInput = Omit<
+  typeof ingredients.$inferInsert,
+  "id" | "householdId" | "createdBy" | "createdAt" | "updatedAt"
+>;
+
 export async function createIngredient(
   householdId: string,
   userId: string,
-  data: typeof ingredients.$inferInsert,
+  data: IngredientInput,
   tagIds?: string[],
 ) {
   return db.transaction(async (tx) => {
@@ -103,7 +107,12 @@ export async function listProducts(householdId: string, search?: string) {
     .orderBy(products.name);
 }
 
-export async function createProduct(householdId: string, data: typeof products.$inferInsert) {
+type ProductInput = Omit<
+  typeof products.$inferInsert,
+  "id" | "householdId" | "createdAt" | "updatedAt"
+>;
+
+export async function createProduct(householdId: string, data: ProductInput) {
   const [product] = await db.insert(products).values({ ...data, householdId }).returning();
   return product;
 }

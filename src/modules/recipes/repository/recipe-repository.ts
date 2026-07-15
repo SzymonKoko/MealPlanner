@@ -60,11 +60,21 @@ export async function getRecipeWithIngredients(householdId: string, id: string) 
   return { recipe, ingredients: enriched };
 }
 
+type RecipeInput = Omit<
+  typeof recipes.$inferInsert,
+  "id" | "householdId" | "createdBy" | "createdAt" | "updatedAt"
+>;
+
+type RecipeIngredientInput = Omit<
+  typeof recipeIngredients.$inferInsert,
+  "id" | "recipeId"
+>;
+
 export async function createRecipe(
   householdId: string,
   userId: string,
-  data: typeof recipes.$inferInsert,
-  ingredientsData: (typeof recipeIngredients.$inferInsert)[],
+  data: RecipeInput,
+  ingredientsData: RecipeIngredientInput[],
   tagIds?: string[],
 ) {
   return db.transaction(async (tx) => {
@@ -94,8 +104,8 @@ export async function createRecipe(
 export async function updateRecipe(
   householdId: string,
   id: string,
-  data: Partial<typeof recipes.$inferInsert>,
-  ingredientsData?: (typeof recipeIngredients.$inferInsert)[],
+  data: Partial<RecipeInput>,
+  ingredientsData?: RecipeIngredientInput[],
   tagIds?: string[],
 ) {
   return db.transaction(async (tx) => {

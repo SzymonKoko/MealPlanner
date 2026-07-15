@@ -3,7 +3,6 @@ import { requireActiveHousehold } from "@/server/require-household-member";
 import {
   listIngredients,
   listProducts,
-  listCategories,
 } from "@/modules/ingredients/repository/ingredient-repository";
 import {
   createIngredientAction,
@@ -17,10 +16,9 @@ import { Label } from "@/components/ui/label";
 
 export default async function IngredientsPage() {
   const { householdId } = await requireActiveHousehold();
-  const [ingredients, products, categories] = await Promise.all([
+  const [ingredients, products] = await Promise.all([
     listIngredients(householdId),
     listProducts(householdId),
-    listCategories(householdId),
   ]);
 
   return (
