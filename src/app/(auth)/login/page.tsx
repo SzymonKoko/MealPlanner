@@ -21,7 +21,9 @@ export default async function LoginPage() {
           <CardTitle>MealPlanner</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {process.env.AUTHENTIK_ISSUER && process.env.AUTHENTIK_CLIENT_ID ? (
+          {process.env.AUTHENTIK_ISSUER &&
+          process.env.AUTHENTIK_CLIENT_ID &&
+          process.env.AUTHENTIK_CLIENT_SECRET ? (
             <form
               action={async () => {
                 "use server";
@@ -61,9 +63,12 @@ export default async function LoginPage() {
             </form>
           ) : null}
 
-          {!isDevBypass && !process.env.AUTHENTIK_ISSUER ? (
+          {!isDevBypass &&
+          (!process.env.AUTHENTIK_ISSUER ||
+            !process.env.AUTHENTIK_CLIENT_ID ||
+            !process.env.AUTHENTIK_CLIENT_SECRET) ? (
             <p className="text-sm text-destructive">
-              Skonfiguruj AUTHENTIK_* lub włącz DEV_AUTH_BYPASS=true w .env
+              Brak konfiguracji AUTHENTIK_* lub AUTH_SECRET/AUTH_URL w .env
             </p>
           ) : null}
         </CardContent>

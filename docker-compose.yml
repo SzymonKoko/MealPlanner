@@ -27,6 +27,7 @@ services:
     environment:
       DATABASE_URL: postgresql://mealplanner:mealplanner@postgres:5432/mealplanner
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-in-production-32chars}
+      AUTH_URL: ${AUTH_URL:-https://food.rozwinswojbiznes.pl}
       APP_URL: ${APP_URL:-https://food.rozwinswojbiznes.pl}
       AUTHENTIK_ISSUER: ${AUTHENTIK_ISSUER:-https://auth.rozwinswojbiznes.pl/application/o/food-planner-app/}
       AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:-}

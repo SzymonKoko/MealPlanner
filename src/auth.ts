@@ -8,7 +8,11 @@ const isDevBypass =
 function getProviders() {
   const providers: NextAuthConfig["providers"] = [];
 
-  if (process.env.AUTHENTIK_ISSUER && process.env.AUTHENTIK_CLIENT_ID) {
+  if (
+    process.env.AUTHENTIK_ISSUER &&
+    process.env.AUTHENTIK_CLIENT_ID &&
+    process.env.AUTHENTIK_CLIENT_SECRET
+  ) {
     providers.push({
       id: "authentik",
       name: "Authentik",
