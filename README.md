@@ -22,6 +22,32 @@ npm run dev
 
 Aplikacja: http://localhost:3000
 
+## Wdrożenie produkcyjne (serwer)
+
+```bash
+git clone https://github.com/SzymonKoko/MealPlanner.git
+cd MealPlanner
+
+# pierwszy raz — skopiuj config produkcyjny
+cp .env.production.example .env
+nano .env   # ustaw AUTH_SECRET i AUTHENTIK_CLIENT_SECRET
+
+# deploy
+docker compose up -d --build
+
+# migracja (pierwszy raz)
+docker compose exec -T postgres psql -U mealplanner -d mealplanner < src/db/migrations/0001_initial.sql
+```
+
+Aplikacja: `http://localhost:3102` → Cloudflare Tunnel na `https://food.rozwinswojbiznes.pl`
+
+Przy kolejnych deployach `.env` zostaje na serwerze (jest w `.gitignore`):
+
+```bash
+git pull
+docker compose up -d --build
+```
+
 ## Szybki start (Docker)
 
 ```bash

@@ -14,6 +14,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "setup:local": "docker compose up postgres -d && drizzle-kit push",
+    "setup:prod": "sh scripts/deploy-production.sh",
     "dev:local": "next dev --turbopack"
   },
   "dependencies": {
