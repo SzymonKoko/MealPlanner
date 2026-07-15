@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: mealplanner-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: mealplanner
@@ -8,8 +9,6 @@ services:
       POSTGRES_DB: mealplanner
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mealplanner"]
       interval: 5s
@@ -17,18 +16,20 @@ services:
       retries: 5
 
   app:
-    build: .
+    build:
+      context: .
+    container_name: mealplanner-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3102:3000"
     environment:
       DATABASE_URL: postgresql://mealplanner:mealplanner@postgres:5432/mealplanner
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-in-production-32chars}
-      APP_URL: ${APP_URL:-http://localhost:3000}
+      APP_URL: ${APP_URL:-https://food.rozwinswojbiznes.pl}
       AUTHENTIK_ISSUER: ${AUTHENTIK_ISSUER:-}
       AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:-}
       AUTHENTIK_CLIENT_SECRET: ${AUTHENTIK_CLIENT_SECRET:-}
-      DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-true}
+      DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-false}
       UPLOAD_DIR: /app/uploads
     volumes:
       - uploads_data:/app/uploads
@@ -38,6 +39,7 @@ services:
 
   backup:
     image: postgres:16-alpine
+    container_name: mealplanner-backup
     restart: unless-stopped
     environment:
       PGHOST: postgres

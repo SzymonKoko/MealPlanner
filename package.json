@@ -12,7 +12,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "setup:local": "docker compose up postgres -d && drizzle-kit push",
+    "dev:local": "next dev --turbopack"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",

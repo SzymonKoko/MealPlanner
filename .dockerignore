@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env
+.env*.local
+uploads
+coverage
+*.md
+!README.md
+.cursor
+terminals

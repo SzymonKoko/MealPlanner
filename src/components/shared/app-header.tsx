@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { signOut } from "@/auth";
 import { requireAuth } from "@/server/require-auth";
 import { listUserHouseholds } from "@/modules/households/repository/household-repository";
+import { signOutAction } from "@/modules/auth/actions/sign-out";
 import { HouseholdSwitcher } from "./household-switcher";
 import { Button } from "@/components/ui/button";
 
@@ -18,12 +18,7 @@ export async function AppHeader() {
         <div className="flex items-center gap-3">
           <HouseholdSwitcher households={households} activeHouseholdId={user.activeHouseholdId} />
           <span className="hidden text-sm text-muted-foreground sm:inline">{user.displayName}</span>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/login" });
-            }}
-          >
+          <form action={signOutAction}>
             <Button type="submit" variant="ghost" size="sm">
               Wyloguj
             </Button>
