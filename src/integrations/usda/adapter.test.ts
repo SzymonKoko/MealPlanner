@@ -9,7 +9,12 @@ describe("USDA adapter", () => {
         description: "Rice, white, long-grain, regular, raw",
         foodCategory: "Cereal Grains and Pasta",
         dataType: "Foundation",
-        foodNutrients: [{ nutrientName: "Energy", value: 365 }],
+        foodNutrients: [
+          { nutrientName: "Energy", value: 365 },
+          { nutrientName: "Protein", value: 7.1 },
+          { nutrientName: "Carbohydrate, by difference", value: 80 },
+          { nutrientName: "Total lipid (fat)", value: 0.7 },
+        ],
       },
       {
         fdcId: 2,
@@ -22,6 +27,9 @@ describe("USDA adapter", () => {
     expect(results[0]).toMatchObject({
       externalId: "1",
       kcalPer100: "365",
+      proteinPer100: "7.1",
+      carbsPer100: "80",
+      fatPer100: "0.7",
       state: "raw",
     });
     expect(results[1]).toMatchObject({

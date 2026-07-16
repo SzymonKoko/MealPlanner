@@ -34,6 +34,16 @@ function findNutrientByName(
   return match?.amount ?? null;
 }
 
+function findSearchNutrient(
+  nutrients: Array<{ nutrientName?: string; value?: number }> | undefined,
+  names: string[],
+) {
+  const match = nutrients?.find((item) =>
+    names.some((name) => item.nutrientName?.toLowerCase() === name.toLowerCase()),
+  );
+  return match?.value ?? null;
+}
+
 export function mapUsdaSearchResults(
   foods: Array<{
     fdcId: number;
@@ -44,20 +54,30 @@ export function mapUsdaSearchResults(
     foodNutrients?: Array<{ nutrientName?: string; value?: number }>;
   }>,
 ) {
-  return foods.slice(0, 8).map((food) =>
-    ingredientImportSearchResultDtoSchema.parse({
+  return foods.slice(0, 8).map((food) => {
+    const sodium = findSearchNutrient(food.foodNutrients, ["Sodium, Na", "Sodium"]);
+    return ingredientImportSearchResultDtoSchema.parse({
       externalId: String(food.fdcId),
       name: food.description?.trim() || `USDA #${food.fdcId}`,
       description: food.additionalDescriptions?.trim() || null,
       foodCategory: food.foodCategory?.trim() || null,
       dataType: food.dataType?.trim() || null,
       state: classifyState(`${food.description ?? ""} ${food.additionalDescriptions ?? ""}`),
-      kcalPer100: normalizeNumber(
-        food.foodNutrients?.find((item) => item.nutrientName?.toLowerCase() === "energy")?.value ?? null,
+      kcalPer100: normalizeNumber(findSearchNutrient(food.foodNutrients, ["Energy"])),
+      proteinPer100: normalizeNumber(findSearchNutrient(food.foodNutrients, ["Protein"])),
+      carbsPer100: normalizeNumber(
+        findSearchNutrient(food.foodNutrients, ["Carbohydrate, by difference", "Carbohydrate"]),
       ),
+      fatPer100: normalizeNumber(
+        findSearchNutrient(food.foodNutrients, ["Total lipid (fat)", "Total lipid", "Fat"]),
+      ),
+      fiberPer100: normalizeNumber(
+        findSearchNutrient(food.foodNutrients, ["Fiber, total dietary", "Fiber"]),
+      ),
+      saltPer100: sodiumToSalt(sodium),
       dataSource: "usda",
-    }),
-  );
+    });
+  });
 }
 
 export function mapUsdaFoodDetails(food: {

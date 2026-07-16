@@ -2,11 +2,16 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { approveUsdaIngredientAction } from "@/modules/ingredients/actions/ingredient-actions";
+import {
+  approveUsdaIngredientAction,
+  quickAddUsdaIngredientAction,
+} from "@/modules/ingredients/actions/ingredient-actions";
 import type {
   IngredientImportDto,
   IngredientImportSearchResultDto,
@@ -38,16 +43,25 @@ function stateLabel(state: IngredientImportSearchResultDto["state"]) {
   }
 }
 
+function formatMacro(value: string | null, unit = "g") {
+  if (!value) return "—";
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num)) return "—";
+  return `${Math.round(num * 10) / 10}${unit === "kcal" ? "" : unit}`;
+}
+
 export function UsdaIngredientImportFlow({
   categories,
   tags,
   initialQuery = "",
 }: UsdaIngredientImportFlowProps) {
+  const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
   const [translatedQuery, setTranslatedQuery] = useState(initialQuery);
   const [results, setResults] = useState<IngredientImportSearchResultDto[]>([]);
   const [selected, setSelected] = useState<IngredientImportDto | null>(null);
   const [pending, setPending] = useState(false);
+  const [addingId, setAddingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const defaultName = useMemo(() => query.trim() || selected?.name || "", [query, selected?.name]);
@@ -76,7 +90,7 @@ export function UsdaIngredientImportFlow({
     }
   }
 
-  async function handleSelect(externalId: string) {
+  async function handleEdit(externalId: string) {
     setPending(true);
     setError(null);
     try {
@@ -86,10 +100,32 @@ export function UsdaIngredientImportFlow({
         throw new Error(payload.message ?? "Nie udało się pobrać szczegółów USDA");
       }
       setSelected(payload);
+      requestAnimationFrame(() => {
+        document.getElementById("usda-approve-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     } catch (detailsError) {
       setError(detailsError instanceof Error ? detailsError.message : "Nie udało się pobrać szczegółów USDA");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function handleQuickAdd(result: IngredientImportSearchResultDto) {
+    setAddingId(result.externalId);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.set("externalId", result.externalId);
+      formData.set("name", query.trim() || result.name);
+      await quickAddUsdaIngredientAction(formData);
+      toast.success(`Dodano „${query.trim() || result.name}” do składników`);
+      router.refresh();
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : "Nie udało się dodać składnika";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setAddingId(null);
     }
   }
 
@@ -156,19 +192,34 @@ export function UsdaIngredientImportFlow({
                     {result.dataType ? ` · ${result.dataType}` : ""}
                     {` · ${stateLabel(result.state)}`}
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    {result.kcalPer100 ? `${result.kcalPer100} kcal / 100 g` : "Brak kalorii w wyniku wyszukiwania"}
+                  <p className="text-sm tabular-nums">
+                    <span className="font-medium">
+                      {result.kcalPer100 ? `${formatMacro(result.kcalPer100, "kcal")} kcal` : "— kcal"}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      / 100 g · B {formatMacro(result.proteinPer100)} · W {formatMacro(result.carbsPer100)} · T{" "}
+                      {formatMacro(result.fatPer100)}
+                    </span>
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant={selected?.externalId === result.externalId ? "secondary" : "outline"}
-                  className="mt-3"
-                  onClick={() => handleSelect(result.externalId)}
-                  disabled={pending}
-                >
-                  {selected?.externalId === result.externalId ? "Wybrano" : "Wybierz wynik"}
-                </Button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => void handleQuickAdd(result)}
+                    disabled={pending || addingId === result.externalId}
+                  >
+                    {addingId === result.externalId ? "Dodaję…" : "Dodaj"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={selected?.externalId === result.externalId ? "secondary" : "outline"}
+                    onClick={() => void handleEdit(result.externalId)}
+                    disabled={pending}
+                  >
+                    {selected?.externalId === result.externalId ? "Edytujesz" : "Edytuj"}
+                  </Button>
+                </div>
               </div>
             ))
           )}
@@ -176,9 +227,9 @@ export function UsdaIngredientImportFlow({
       </Card>
 
       {selected ? (
-        <Card>
+        <Card id="usda-approve-form">
           <CardHeader>
-            <CardTitle>Zatwierdź składnik</CardTitle>
+            <CardTitle>Edytuj i zatwierdź składnik</CardTitle>
           </CardHeader>
           <CardContent>
             <form action={approveUsdaIngredientAction} className="space-y-4">

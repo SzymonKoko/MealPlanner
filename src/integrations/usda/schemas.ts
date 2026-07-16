@@ -54,6 +54,11 @@ export const ingredientImportSearchResultDtoSchema = z.object({
   dataType: z.string().nullable(),
   state: z.enum(["raw", "cooked", "processed", "unknown"]),
   kcalPer100: z.string().nullable(),
+  proteinPer100: z.string().nullable(),
+  carbsPer100: z.string().nullable(),
+  fatPer100: z.string().nullable(),
+  fiberPer100: z.string().nullable(),
+  saltPer100: z.string().nullable(),
   dataSource: z.literal("usda"),
 });
 
