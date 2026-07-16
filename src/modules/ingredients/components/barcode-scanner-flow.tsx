@@ -445,10 +445,10 @@ export function BarcodeScannerFlow({
                     <option value="per100ml">na 100 ml</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
                   {nutritionFields.map(([field, label]) => (
-                    <div key={field} className="flex min-w-0 flex-col gap-2">
-                      <Label htmlFor={field} className="min-h-10 leading-tight">
+                    <div key={field} className="flex min-w-0 flex-col gap-1">
+                      <Label htmlFor={field} className="leading-tight">
                         {label}
                       </Label>
                       <Input
@@ -458,6 +458,7 @@ export function BarcodeScannerFlow({
                         step="0.0001"
                         min="0"
                         inputMode="decimal"
+                        className="h-10"
                         value={draft[field] ?? ""}
                         onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))}
                       />
