@@ -365,13 +365,14 @@ function IngredientConversionsForm({
 }
 
 interface IngredientsPageProps {
-  searchParams: Promise<{ q?: string; category?: string; tag?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; tag?: string; sort?: string; maxKcal?: string }>;
 }
 
 export default async function IngredientsPage({ searchParams }: IngredientsPageProps) {
   const { householdId, role } = await requireActiveHouseholdOrRedirect();
-  const { q = "", category = "", tag = "" } = await searchParams;
+  const { q = "", category = "", tag = "", sort = "name", maxKcal = "" } = await searchParams;
   const search = q.trim();
+  const maxKcalValue = maxKcal.trim() ? Number.parseFloat(maxKcal) : null;
   const [listedIngredients, products, categories, tags, allTags] = await Promise.all([
     listIngredients(householdId, search || undefined, category || undefined),
     listProducts(householdId, search || undefined),
@@ -413,6 +414,7 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
       kind: "ingredient" as const,
       id: entry.id,
       name: entry.name,
+      kcal: entry.kcalPer100 ? Number.parseFloat(entry.kcalPer100) : null,
       sortKey: entry.name.toLocaleLowerCase("pl"),
       entry,
     })),
@@ -420,10 +422,24 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
       kind: "product" as const,
       id: entry.id,
       name: entry.name,
+      kcal: entry.kcalPer100 ? Number.parseFloat(entry.kcalPer100) : null,
       sortKey: entry.name.toLocaleLowerCase("pl"),
       entry,
     })),
-  ].sort((a, b) => a.sortKey.localeCompare(b.sortKey, "pl"));
+  ]
+    .filter((item) => {
+      if (maxKcalValue == null || !Number.isFinite(maxKcalValue)) return true;
+      return item.kcal != null && item.kcal <= maxKcalValue;
+    })
+    .sort((a, b) => {
+      if (sort === "kcal-asc") {
+        return (a.kcal ?? Number.POSITIVE_INFINITY) - (b.kcal ?? Number.POSITIVE_INFINITY);
+      }
+      if (sort === "kcal-desc") {
+        return (b.kcal ?? -1) - (a.kcal ?? -1);
+      }
+      return a.sortKey.localeCompare(b.sortKey, "pl");
+    });
 
   return (
     <DashboardShell>
@@ -436,7 +452,7 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
         </div>
 
         <form
-          className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_11rem_11rem_auto]"
+          className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_9rem_9rem_9rem_7rem_auto]"
           method="get"
         >
           <Input name="q" defaultValue={search} placeholder="Szukaj nazwy, marki lub kodu" className="h-10" />
@@ -464,8 +480,25 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
               </option>
             ))}
           </select>
+          <select
+            name="sort"
+            defaultValue={sort}
+            className="flex h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            <option value="name">Sortuj: nazwa</option>
+            <option value="kcal-asc">Sortuj: kcal ↑</option>
+            <option value="kcal-desc">Sortuj: kcal ↓</option>
+          </select>
+          <Input
+            name="maxKcal"
+            type="number"
+            min="0"
+            defaultValue={maxKcal}
+            placeholder="Max kcal"
+            className="h-10"
+          />
           <Button type="submit" variant="secondary" className="h-10">
-            Szukaj
+            Filtruj
           </Button>
         </form>
 

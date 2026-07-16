@@ -11,6 +11,11 @@ import { MealPlanView } from "@/modules/meal-planner/components/meal-plan-view";
 import { formatDateISO, getWeekStart, parseDateParam } from "@/lib/dates";
 import { canEdit } from "@/modules/households/services/role-checks";
 import { addDays, format, parseISO } from "date-fns";
+import {
+  getRecipesKcalPerServing,
+  sumPlannedNutritionByDate,
+} from "@/modules/nutrition/services/planned-nutrition";
+import { EMPTY_NUTRITION } from "@/lib/nutrition";
 
 interface PlanPageProps {
   searchParams: Promise<{ week?: string; view?: string; day?: string }>;
@@ -46,6 +51,39 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     getHouseholdMembers(householdId),
   ]);
 
+  const [recipeKcal, dayNutrition] = await Promise.all([
+    getRecipesKcalPerServing(
+      householdId,
+      recipes.map((recipe) => recipe.id),
+    ),
+    sumPlannedNutritionByDate(
+      householdId,
+      plan.entries.map((e) => ({
+        recipeId: e.entry.recipeId,
+        ingredientId: e.entry.ingredientId,
+        productId: e.entry.productId,
+        servings: e.entry.servings,
+        date: e.entry.date,
+      })),
+    ),
+  ]);
+
+  const weekDays = Array.from({ length: 7 }, (_, i) =>
+    format(addDays(parseISO(weekStart), i), "yyyy-MM-dd"),
+  );
+  const dayTotals = Object.fromEntries(
+    weekDays.map((day) => [
+      day,
+      {
+        kcal: dayNutrition[day]?.kcal ?? 0,
+        protein: dayNutrition[day]?.protein ?? 0,
+        carbs: dayNutrition[day]?.carbs ?? 0,
+        fat: dayNutrition[day]?.fat ?? 0,
+        fiber: dayNutrition[day]?.fiber ?? EMPTY_NUTRITION.fiber,
+      },
+    ]),
+  );
+
   const entries = plan.entries.map((e) => ({
     id: e.entry.id,
     recipeId: e.entry.recipeId,
@@ -57,7 +95,6 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     mealType: e.entry.mealType,
     servings: e.entry.servings,
     notes: e.entry.notes,
-    status: e.entry.status,
     isBatchCooking: e.entry.isBatchCooking,
   }));
 
@@ -73,11 +110,19 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       id: item.id,
       name: item.name,
       kind: "ingredient" as const,
+      kcal: item.kcalPer100 ? Number.parseFloat(item.kcalPer100) : null,
+      kcalLabel: item.kcalPer100
+        ? `${Math.round(Number.parseFloat(item.kcalPer100))} / 100${item.nutritionBasis === "per100ml" ? "ml" : "g"}`
+        : null,
     })),
     ...productRows.map((item) => ({
       id: item.id,
       name: item.name,
       kind: "product" as const,
+      kcal: item.kcalPer100 ? Number.parseFloat(item.kcalPer100) : null,
+      kcalLabel: item.kcalPer100
+        ? `${Math.round(Number.parseFloat(item.kcalPer100))} / 100${item.nutritionBasis === "per100ml" ? "ml" : "g"}`
+        : null,
     })),
   ].sort((a, b) => a.name.localeCompare(b.name, "pl"));
 
@@ -91,7 +136,17 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           view={view}
           entries={entries}
           assignments={assignments}
-          recipes={recipes.map((r) => ({ id: r.id, name: r.name, kind: "recipe" as const }))}
+          dayTotals={dayTotals}
+          recipes={recipes.map((r) => {
+            const kcal = recipeKcal.get(r.id) ?? null;
+            return {
+              id: r.id,
+              name: r.name,
+              kind: "recipe" as const,
+              kcal,
+              kcalLabel: kcal != null ? `${Math.round(kcal)} / porcję` : null,
+            };
+          })}
           ingredients={catalogIngredients}
           members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
           editable={canEdit(role)}

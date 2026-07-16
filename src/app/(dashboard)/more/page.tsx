@@ -216,17 +216,6 @@ export default async function MorePage() {
             </Card> : null}
           </>
         ) : null}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Nawigacja</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Link href="/ingredients" className="text-primary underline">
-              Składniki i produkty
-            </Link>
-          </CardContent>
-        </Card>
       </div>
     </DashboardShell>
   );

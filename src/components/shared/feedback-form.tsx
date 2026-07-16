@@ -10,6 +10,7 @@ type FeedbackFormProps = Omit<ComponentProps<"form">, "action"> & {
   action: ServerAction;
   successMessage: string;
   errorMessage?: string;
+  onSuccess?: () => void;
   children: ReactNode;
 };
 
@@ -34,6 +35,7 @@ export function FeedbackForm({
   action,
   successMessage,
   errorMessage = "Nie udało się zapisać. Spróbuj ponownie.",
+  onSuccess,
   children,
   ...props
 }: FeedbackFormProps) {
@@ -46,6 +48,7 @@ export function FeedbackForm({
         try {
           await action(formData);
           toast.success(successMessage);
+          onSuccess?.();
           router.refresh();
         } catch (error) {
           if (isNextRedirect(error)) throw error;
