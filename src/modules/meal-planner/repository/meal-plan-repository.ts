@@ -3,11 +3,21 @@ import {
   mealPlanEntries,
   mealPlanAssignments,
   recipes,
+  ingredients,
+  products,
   users,
 } from "@/db/schema";
-import { and, eq, gte, lte, between, inArray, isNull } from "drizzle-orm";
+import { and, eq, gte, lte, between, inArray, isNull, isNotNull, or } from "drizzle-orm";
 import { addDays, format, parseISO } from "date-fns";
 import type { MealType } from "@/db/schema/meal-planner";
+
+function activeSourceFilter() {
+  return or(
+    and(isNotNull(mealPlanEntries.recipeId), isNull(recipes.deletedAt)),
+    and(isNotNull(mealPlanEntries.ingredientId), isNull(ingredients.deletedAt)),
+    isNotNull(mealPlanEntries.productId),
+  );
+}
 
 export async function getMealPlanForWeek(householdId: string, weekStart: string) {
   const start = parseISO(weekStart);
@@ -15,22 +25,37 @@ export async function getMealPlanForWeek(householdId: string, weekStart: string)
   const dateFrom = format(start, "yyyy-MM-dd");
   const dateTo = format(end, "yyyy-MM-dd");
 
-  const entries = await db
+  const rows = await db
     .select({
       entry: mealPlanEntries,
       recipeName: recipes.name,
       recipeImageUrl: recipes.imageUrl,
+      ingredientName: ingredients.name,
+      productName: products.name,
     })
     .from(mealPlanEntries)
-    .innerJoin(recipes, eq(mealPlanEntries.recipeId, recipes.id))
+    .leftJoin(recipes, eq(mealPlanEntries.recipeId, recipes.id))
+    .leftJoin(ingredients, eq(mealPlanEntries.ingredientId, ingredients.id))
+    .leftJoin(products, eq(mealPlanEntries.productId, products.id))
     .where(
       and(
         eq(mealPlanEntries.householdId, householdId),
         between(mealPlanEntries.date, dateFrom, dateTo),
-        isNull(recipes.deletedAt),
+        activeSourceFilter(),
       ),
     )
     .orderBy(mealPlanEntries.date, mealPlanEntries.mealType);
+
+  const entries = rows.map((row) => ({
+    entry: row.entry,
+    itemName: row.recipeName ?? row.ingredientName ?? row.productName ?? "Posiłek",
+    recipeImageUrl: row.recipeImageUrl,
+    sourceType: row.entry.recipeId
+      ? ("recipe" as const)
+      : row.entry.ingredientId
+        ? ("ingredient" as const)
+        : ("product" as const),
+  }));
 
   const entryIds = entries.map((e) => e.entry.id);
   const assignments = entryIds.length
@@ -48,28 +73,39 @@ export async function getMealPlanForWeek(householdId: string, weekStart: string)
 }
 
 export async function getMealPlanForDate(householdId: string, date: string) {
-  return db
+  const rows = await db
     .select({
       entry: mealPlanEntries,
       recipeName: recipes.name,
+      ingredientName: ingredients.name,
+      productName: products.name,
     })
     .from(mealPlanEntries)
-    .innerJoin(recipes, eq(mealPlanEntries.recipeId, recipes.id))
+    .leftJoin(recipes, eq(mealPlanEntries.recipeId, recipes.id))
+    .leftJoin(ingredients, eq(mealPlanEntries.ingredientId, ingredients.id))
+    .leftJoin(products, eq(mealPlanEntries.productId, products.id))
     .where(
       and(
         eq(mealPlanEntries.householdId, householdId),
         eq(mealPlanEntries.date, date),
-        isNull(recipes.deletedAt),
+        activeSourceFilter(),
       ),
     )
     .orderBy(mealPlanEntries.mealType);
+
+  return rows.map((row) => ({
+    entry: row.entry,
+    itemName: row.recipeName ?? row.ingredientName ?? row.productName ?? "Posiłek",
+  }));
 }
 
 export async function createMealPlanEntry(
   householdId: string,
   userId: string,
   data: {
-    recipeId: string;
+    recipeId?: string;
+    ingredientId?: string;
+    productId?: string;
     date: string;
     mealType: MealType;
     servings: number;
@@ -81,7 +117,13 @@ export async function createMealPlanEntry(
     .values({
       householdId,
       createdBy: userId,
-      ...data,
+      recipeId: data.recipeId ?? null,
+      ingredientId: data.ingredientId ?? null,
+      productId: data.productId ?? null,
+      date: data.date,
+      mealType: data.mealType,
+      servings: data.servings,
+      notes: data.notes,
     })
     .returning();
   return entry;
@@ -135,6 +177,8 @@ export async function copyMealPlanEntry(
       .values({
         householdId,
         recipeId: original.recipeId,
+        ingredientId: original.ingredientId,
+        productId: original.productId,
         date: targetDate ?? original.date,
         mealType: targetMealType ?? original.mealType,
         servings: original.servings,
@@ -204,6 +248,8 @@ export async function copyPreviousWeek(
         sourceEntries.map((entry) => ({
           householdId,
           recipeId: entry.recipeId,
+          ingredientId: entry.ingredientId,
+          productId: entry.productId,
           date: format(addDays(parseISO(entry.date), dayOffset), "yyyy-MM-dd"),
           mealType: entry.mealType,
           servings: entry.servings,

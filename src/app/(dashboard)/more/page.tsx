@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { PwaInstallButton } from "@/components/shared/pwa-install-button";
+import { FeedbackForm } from "@/components/shared/feedback-form";
 
 export default async function MorePage() {
   const user = await requireAuth();
@@ -111,7 +112,7 @@ export default async function MorePage() {
                 <CardTitle>Cele żywieniowe</CardTitle>
               </CardHeader>
               <CardContent>
-                <form action={saveNutritionGoalsAction} className="grid gap-3 sm:grid-cols-2">
+                <FeedbackForm action={saveNutritionGoalsAction} successMessage="Zapisano cele żywieniowe" className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="kcalTarget">Kalorie</Label>
                     <Input id="kcalTarget" name="kcalTarget" type="number" defaultValue={goals?.kcalTarget ?? ""} />
@@ -135,7 +136,7 @@ export default async function MorePage() {
                   <div className="sm:col-span-2">
                     <Button type="submit">Zapisz cele</Button>
                   </div>
-                </form>
+                </FeedbackForm>
               </CardContent>
             </Card>
 

@@ -24,7 +24,7 @@ import {
 } from "../repository/meal-plan-repository";
 import { AppError } from "@/lib/errors";
 import { db } from "@/db/client";
-import { householdMembers, mealPlanEntries, recipes } from "@/db/schema";
+import { householdMembers, mealPlanEntries, recipes, ingredients, products } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import {
   canSetAssignment,
@@ -35,6 +35,8 @@ export async function addMealPlanEntryAction(formData: FormData) {
   const { user, householdId } = await requireActiveHouseholdEditor();
   const parsed = mealPlanEntrySchema.safeParse({
     recipeId: formData.get("recipeId"),
+    ingredientId: formData.get("ingredientId"),
+    productId: formData.get("productId"),
     date: formData.get("date"),
     mealType: formData.get("mealType"),
     servings: formData.get("servings") || 1,
@@ -45,18 +47,44 @@ export async function addMealPlanEntryAction(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  const [recipe] = await db
-    .select({ id: recipes.id })
-    .from(recipes)
-    .where(
-      and(
-        eq(recipes.id, parsed.data.recipeId),
-        eq(recipes.householdId, householdId),
-        isNull(recipes.deletedAt),
-      ),
-    )
-    .limit(1);
-  if (!recipe) throw new AppError("Przepis nie należy do gospodarstwa", "VALIDATION_ERROR");
+  if (parsed.data.recipeId) {
+    const [recipe] = await db
+      .select({ id: recipes.id })
+      .from(recipes)
+      .where(
+        and(
+          eq(recipes.id, parsed.data.recipeId),
+          eq(recipes.householdId, householdId),
+          isNull(recipes.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!recipe) throw new AppError("Przepis nie należy do gospodarstwa", "VALIDATION_ERROR");
+  }
+
+  if (parsed.data.ingredientId) {
+    const [ingredient] = await db
+      .select({ id: ingredients.id })
+      .from(ingredients)
+      .where(
+        and(
+          eq(ingredients.id, parsed.data.ingredientId),
+          eq(ingredients.householdId, householdId),
+          isNull(ingredients.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!ingredient) throw new AppError("Składnik nie należy do gospodarstwa", "VALIDATION_ERROR");
+  }
+
+  if (parsed.data.productId) {
+    const [product] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.id, parsed.data.productId), eq(products.householdId, householdId)))
+      .limit(1);
+    if (!product) throw new AppError("Produkt nie należy do gospodarstwa", "VALIDATION_ERROR");
+  }
 
   await createMealPlanEntry(householdId, user.id, parsed.data);
   revalidatePath("/plan");

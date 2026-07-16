@@ -1,22 +1,27 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { addDays, format, parseISO } from "date-fns";
 import { pl } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { MEAL_TYPE_LABELS, mealTypeEnum } from "@/lib/meal-types";
 import type { MealType } from "@/db/schema/meal-planner";
+import { toast } from "sonner";
+import { FeedbackForm } from "@/components/shared/feedback-form";
 import {
   addMealPlanEntryAction,
   moveMealPlanEntryAction,
@@ -26,18 +31,16 @@ import {
   assignPortionsAction,
   updateMealPlanDetailsAction,
 } from "@/modules/meal-planner/actions/meal-plan-actions";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
+type SourceType = "recipe" | "ingredient" | "product";
 
 interface PlanEntry {
   id: string;
-  recipeId: string;
-  recipeName: string;
+  recipeId: string | null;
+  ingredientId: string | null;
+  productId: string | null;
+  itemName: string;
+  sourceType: SourceType;
   date: string;
   mealType: MealType;
   servings: number;
@@ -58,18 +61,45 @@ interface Member {
   displayName: string;
 }
 
-interface Recipe {
+interface PaletteItem {
   id: string;
   name: string;
+  kind: SourceType;
 }
 
 interface MealPlanViewProps {
   weekStart: string;
   entries: PlanEntry[];
   assignments: Assignment[];
-  recipes: Recipe[];
+  recipes: PaletteItem[];
+  ingredients: PaletteItem[];
   members: Member[];
   editable: boolean;
+}
+
+function parseDropId(id: string): { date: string; mealType: MealType } | null {
+  const [date, mealType] = id.split("|");
+  if (!date || !mealType) return null;
+  if (!(mealTypeEnum as readonly string[]).includes(mealType)) return null;
+  return { date, mealType: mealType as MealType };
+}
+
+function parseDragId(id: string):
+  | { type: "entry"; entryId: string }
+  | { type: "palette"; kind: SourceType; itemId: string }
+  | null {
+  if (id.startsWith("entry:")) {
+    return { type: "entry", entryId: id.slice("entry:".length) };
+  }
+  const paletteMatch = id.match(/^palette:(recipe|ingredient|product):(.+)$/);
+  if (paletteMatch) {
+    return {
+      type: "palette",
+      kind: paletteMatch[1] as SourceType,
+      itemId: paletteMatch[2],
+    };
+  }
+  return null;
 }
 
 export function MealPlanView({
@@ -77,6 +107,7 @@ export function MealPlanView({
   entries: initialEntries,
   assignments: initialAssignments,
   recipes,
+  ingredients,
   members,
   editable,
 }: MealPlanViewProps) {
@@ -85,6 +116,9 @@ export function MealPlanView({
   const [selectedDay, setSelectedDay] = useState(weekStart);
   const [moveEntryId, setMoveEntryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [activeDragLabel, setActiveDragLabel] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
@@ -96,6 +130,18 @@ export function MealPlanView({
     format(addDays(parseISO(weekStart), i), "yyyy-MM-dd"),
   );
 
+  const filteredRecipes = useMemo(() => {
+    const q = paletteQuery.trim().toLowerCase();
+    if (!q) return recipes;
+    return recipes.filter((item) => item.name.toLowerCase().includes(q));
+  }, [paletteQuery, recipes]);
+
+  const filteredIngredients = useMemo(() => {
+    const q = paletteQuery.trim().toLowerCase();
+    if (!q) return ingredients;
+    return ingredients.filter((item) => item.name.toLowerCase().includes(q));
+  }, [ingredients, paletteQuery]);
+
   const navigateWeek = (offset: number) => {
     const newStart = format(addDays(parseISO(weekStart), offset * 7), "yyyy-MM-dd");
     window.location.href = `/plan?week=${newStart}`;
@@ -103,14 +149,29 @@ export function MealPlanView({
 
   const dayEntries = entries.filter((e) => e.date === selectedDay);
 
-  async function handleAdd(recipeId: string, mealType: MealType) {
+  async function handleAdd(
+    kind: SourceType,
+    itemId: string,
+    date: string,
+    mealType: MealType,
+    itemName: string,
+  ) {
     const formData = new FormData();
-    formData.set("recipeId", recipeId);
-    formData.set("date", selectedDay);
+    if (kind === "recipe") formData.set("recipeId", itemId);
+    if (kind === "ingredient") formData.set("ingredientId", itemId);
+    if (kind === "product") formData.set("productId", itemId);
+    formData.set("date", date);
     formData.set("mealType", mealType);
     formData.set("servings", "1");
-    await addMealPlanEntryAction(formData);
-    window.location.reload();
+    setError(null);
+    try {
+      await addMealPlanEntryAction(formData);
+      toast.success(`Dodano „${itemName}” do planu`);
+      window.location.reload();
+    } catch {
+      setError(`Nie udało się dodać „${itemName}”. Spróbuj ponownie.`);
+      toast.error(`Nie udało się dodać „${itemName}”`);
+    }
   }
 
   async function handleMove(entryId: string, date: string, mealType: MealType) {
@@ -122,23 +183,72 @@ export function MealPlanView({
     try {
       await moveMealPlanEntryAction(formData);
       setEntries((current) =>
-        current.map((entry) => entry.id === entryId ? { ...entry, date, mealType } : entry),
+        current.map((entry) => (entry.id === entryId ? { ...entry, date, mealType } : entry)),
       );
       setMoveEntryId(null);
+      toast.success("Przeniesiono posiłek");
     } catch {
       setError("Nie udało się przenieść posiłku. Odśwież widok i spróbuj ponownie.");
+      toast.error("Nie udało się przenieść posiłku");
       throw new Error("Meal plan move failed");
     }
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    if (!event.over) return;
-    const [date, mealType] = String(event.over.id).split("|") as [string, MealType];
-    const entryId = String(event.active.id);
-    const entry = entries.find((item) => item.id === entryId);
-    if (!entry || (entry.date === date && entry.mealType === mealType)) return;
-    void handleMove(entryId, date, mealType).catch(() => undefined);
+  function handleDragStart(event: DragStartEvent) {
+    setIsDragging(true);
+    const parsed = parseDragId(String(event.active.id));
+    if (!parsed) {
+      setActiveDragLabel(null);
+      return;
+    }
+    if (parsed.type === "entry") {
+      setActiveDragLabel(entries.find((item) => item.id === parsed.entryId)?.itemName ?? "Posiłek");
+      return;
+    }
+    const palette =
+      parsed.kind === "recipe"
+        ? recipes
+        : ingredients;
+    setActiveDragLabel(palette.find((item) => item.id === parsed.itemId)?.name ?? "Element");
   }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setIsDragging(false);
+    setActiveDragLabel(null);
+    if (!event.over || !editable) return;
+
+    const drop = parseDropId(String(event.over.id));
+    const drag = parseDragId(String(event.active.id));
+    if (!drop || !drag) return;
+
+    if (drag.type === "entry") {
+      const entry = entries.find((item) => item.id === drag.entryId);
+      if (!entry || (entry.date === drop.date && entry.mealType === drop.mealType)) return;
+      void handleMove(drag.entryId, drop.date, drop.mealType).catch(() => undefined);
+      return;
+    }
+
+    const item =
+      drag.kind === "recipe"
+        ? recipes.find((r) => r.id === drag.itemId)
+        : ingredients.find((i) => i.id === drag.itemId && i.kind === drag.kind);
+    if (!item) return;
+    void handleAdd(drag.kind, drag.itemId, drop.date, drop.mealType, item.name);
+  }
+
+  function handleDragCancel() {
+    setIsDragging(false);
+    setActiveDragLabel(null);
+  }
+
+  const palette = editable ? (
+    <PlanPalette
+      query={paletteQuery}
+      onQueryChange={setPaletteQuery}
+      recipes={filteredRecipes}
+      ingredients={filteredIngredients}
+    />
+  ) : null;
 
   return (
     <div className="space-y-4">
@@ -170,31 +280,40 @@ export function MealPlanView({
       </div>
 
       {editable ? (
-        <form action={copyPreviousWeekAction} className="flex flex-wrap gap-2">
+        <FeedbackForm action={copyPreviousWeekAction} successMessage="Skopiowano poprzedni tydzień" className="flex flex-wrap gap-2">
           <input type="hidden" name="sourceWeekStart" value={format(addDays(parseISO(weekStart), -7), "yyyy-MM-dd")} />
           <input type="hidden" name="targetWeekStart" value={weekStart} />
           <Button type="submit" variant="secondary" size="sm">Kopiuj poprzedni tydzień</Button>
-        </form>
+        </FeedbackForm>
       ) : null}
 
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="hidden md:grid md:grid-cols-8 md:gap-2">
-        <div />
-        {weekDays.map((day) => (
-          <div key={day} className="text-center text-sm font-medium">
-            {format(parseISO(day), "EEE d", { locale: pl })}
-          </div>
-        ))}
-        {mealTypeEnum.map((mealType) => (
-          <Fragment key={mealType}>
-            <div className="text-sm text-muted-foreground">
-              {MEAL_TYPE_LABELS[mealType]}
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <div className="hidden md:grid md:grid-cols-8 md:items-start md:gap-2">
+          <div />
+          {weekDays.map((day) => (
+            <div key={day} className="text-center text-sm font-medium">
+              {format(parseISO(day), "EEE d", { locale: pl })}
             </div>
-            {weekDays.map((day) => {
-              const cellEntries = entries.filter((e) => e.date === day && e.mealType === mealType);
-              return (
-                <DroppablePlanCell key={`${day}-${mealType}`} id={`${day}|${mealType}`}>
-                  <CardContent className="space-y-1 p-2">
+          ))}
+          {mealTypeEnum.map((mealType) => (
+            <Fragment key={mealType}>
+              <div className="pt-2 text-sm text-muted-foreground">
+                {MEAL_TYPE_LABELS[mealType]}
+              </div>
+              {weekDays.map((day) => {
+                const cellEntries = entries.filter((e) => e.date === day && e.mealType === mealType);
+                return (
+                  <DroppablePlanCell
+                    key={`${day}-${mealType}`}
+                    id={`${day}|${mealType}`}
+                    isDragging={isDragging}
+                    empty={!cellEntries.length}
+                  >
                     {cellEntries.map((entry) => (
                       <PlanEntryCard
                         key={entry.id}
@@ -209,26 +328,28 @@ export function MealPlanView({
                         setMoveEntryId={setMoveEntryId}
                       />
                     ))}
-                    {editable ? <AddRecipeSelect recipes={recipes} onAdd={(id) => handleAdd(id, mealType)} /> : null}
-                  </CardContent>
-                </DroppablePlanCell>
-              );
-            })}
-          </Fragment>
-        ))}
-      </div>
-      </DndContext>
+                  </DroppablePlanCell>
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
 
-      <div className="space-y-4 md:hidden">
-        <h2 className="font-semibold">
-          {format(parseISO(selectedDay), "EEEE, d MMMM", { locale: pl })}
-        </h2>
-        {mealTypeEnum.map((mealType) => {
-          const typeEntries = dayEntries.filter((e) => e.mealType === mealType);
-          return (
-            <Card key={mealType}>
-              <CardContent className="p-4 space-y-2">
-                <p className="font-medium">{MEAL_TYPE_LABELS[mealType]}</p>
+        <div className="space-y-4 md:hidden">
+          <h2 className="font-semibold">
+            {format(parseISO(selectedDay), "EEEE, d MMMM", { locale: pl })}
+          </h2>
+          {mealTypeEnum.map((mealType) => {
+            const typeEntries = dayEntries.filter((e) => e.mealType === mealType);
+            return (
+              <DroppablePlanCell
+                key={mealType}
+                id={`${selectedDay}|${mealType}`}
+                isDragging={isDragging}
+                empty={!typeEntries.length}
+                className="min-h-24"
+              >
+                <p className="mb-2 font-medium">{MEAL_TYPE_LABELS[mealType]}</p>
                 {typeEntries.map((entry) => (
                   <PlanEntryCard
                     key={entry.id}
@@ -238,28 +359,146 @@ export function MealPlanView({
                     onMove={(date, mt) => handleMove(entry.id, date, mt)}
                     weekDays={weekDays}
                     editable={editable}
+                    draggable={editable}
                     moveEntryId={moveEntryId}
                     setMoveEntryId={setMoveEntryId}
                   />
                 ))}
-                {editable ? <AddRecipeSelect recipes={recipes} onAdd={(id) => handleAdd(id, mealType)} /> : null}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+              </DroppablePlanCell>
+            );
+          })}
+        </div>
+
+        {palette}
+
+        <DragOverlay>
+          {activeDragLabel ? (
+            <div className="rounded-md border bg-background px-3 py-2 text-sm shadow-md">
+              {activeDragLabel}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 }
 
-function DroppablePlanCell({ id, children }: { id: string; children: React.ReactNode }) {
+function PlanPalette({
+  query,
+  onQueryChange,
+  recipes,
+  ingredients,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  recipes: PaletteItem[];
+  ingredients: PaletteItem[];
+}) {
+  return (
+    <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="font-semibold">Przepisy i składniki</h2>
+          <p className="text-sm text-muted-foreground">
+            Przeciągnij element na slot w planerze (np. sam skyr na śniadanie).
+          </p>
+        </div>
+        <Input
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Szukaj…"
+          className="sm:max-w-xs"
+          aria-label="Szukaj w palecie"
+        />
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Przepisy</p>
+          <div className="flex flex-wrap gap-2">
+            {recipes.length ? (
+              recipes.map((item) => (
+                <PaletteChip key={`recipe-${item.id}`} item={item} />
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">Brak przepisów.</p>
+            )}
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Składniki</p>
+          <div className="flex flex-wrap gap-2">
+            {ingredients.length ? (
+              ingredients.map((item) => (
+                <PaletteChip key={`${item.kind}-${item.id}`} item={item} />
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">Brak składników.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PaletteChip({ item }: { item: PaletteItem }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `palette:${item.kind}:${item.id}`,
+  });
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      style={style}
+      className="cursor-grab touch-none rounded-md border bg-background px-3 py-2 text-left text-sm shadow-sm active:cursor-grabbing"
+      {...listeners}
+      {...attributes}
+    >
+      <span className="font-medium">{item.name}</span>
+      <span className="mt-0.5 block text-[11px] text-muted-foreground">
+        {item.kind === "recipe" ? "Przepis" : "Składnik"}
+      </span>
+    </button>
+  );
+}
+
+function DroppablePlanCell({
+  id,
+  children,
+  isDragging,
+  empty,
+  className = "",
+}: {
+  id: string;
+  children: React.ReactNode;
+  isDragging: boolean;
+  empty: boolean;
+  className?: string;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <Card
       ref={setNodeRef}
-      className={`min-h-20 transition-colors ${isOver ? "border-primary bg-accent" : ""}`}
+      className={`h-auto min-h-20 transition-colors ${isOver ? "border-primary bg-accent" : ""} ${className}`}
     >
-      {children}
+      <CardContent className="flex h-full flex-col gap-2 p-2">
+        {children}
+        {empty ? (
+          <p
+            className={`mt-auto py-3 text-center text-xs ${
+              isDragging ? "text-primary" : "text-muted-foreground/70"
+            }`}
+          >
+            {isDragging ? "Upuść tutaj" : "Pusto"}
+          </p>
+        ) : null}
+      </CardContent>
     </Card>
   );
 }
@@ -286,7 +525,7 @@ function PlanEntryCard({
   setMoveEntryId?: (id: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: entry.id,
+    id: `entry:${entry.id}`,
     disabled: !draggable,
   });
   const style = {
@@ -298,13 +537,15 @@ function PlanEntryCard({
     <div ref={setNodeRef} style={style} className="rounded-md border bg-accent/30 p-2 text-sm">
       <button
         type="button"
-        className={draggable ? "cursor-grab touch-none font-medium" : "font-medium"}
+        className={draggable ? "cursor-grab touch-none text-left font-medium" : "text-left font-medium"}
         {...(draggable ? listeners : {})}
         {...(draggable ? attributes : {})}
       >
-        {entry.recipeName}
+        {entry.itemName}
       </button>
-      <p className="text-xs text-muted-foreground">{entry.servings} porcji</p>
+      <p className="text-xs text-muted-foreground">
+        {entry.sourceType === "recipe" ? "Przepis" : "Składnik"} · {entry.servings} porcji
+      </p>
       {entry.status !== "planned" ? (
         <p className="text-xs text-muted-foreground">
           {entry.status === "prepared" ? "Przygotowane" : "Zjedzone"}
@@ -324,14 +565,22 @@ function PlanEntryCard({
               <div key={member.userId} className="flex min-h-11 items-center justify-between gap-2">
                 <span className="truncate text-xs">{member.displayName}</span>
                 <div className="flex items-center gap-1">
-                  <form action={assignPortionsAction}>
+                  <form
+                    action={async (formData) => {
+                      await assignPortionsAction(formData);
+                    }}
+                  >
                     <input type="hidden" name="mealPlanEntryId" value={entry.id} />
                     <input type="hidden" name="userId" value={member.userId} />
                     <input type="hidden" name="servings" value={Math.max(0, current - 1)} />
                     <Button type="submit" variant="outline" size="sm" disabled={current === 0} aria-label={`Odejmij porcję: ${member.displayName}`}>−</Button>
                   </form>
                   <span className="min-w-5 text-center text-xs">{current}</span>
-                  <form action={assignPortionsAction}>
+                  <form
+                    action={async (formData) => {
+                      await assignPortionsAction(formData);
+                    }}
+                  >
                     <input type="hidden" name="mealPlanEntryId" value={entry.id} />
                     <input type="hidden" name="userId" value={member.userId} />
                     <input type="hidden" name="servings" value={current + 1} />
@@ -352,13 +601,22 @@ function PlanEntryCard({
               Przenieś / kopiuj
             </Button>
           ) : null}
-          <form action={deleteMealPlanEntryAction.bind(null, entry.id)}>
+          <FeedbackForm
+            action={deleteMealPlanEntryAction.bind(null, entry.id)}
+            successMessage="Usunięto posiłek z planu"
+            errorMessage="Nie udało się usunąć posiłku"
+          >
             <Button type="submit" variant="ghost" size="sm" className="text-xs text-destructive">Usuń</Button>
-          </form>
+          </FeedbackForm>
           </div>
           <details>
             <summary className="cursor-pointer text-xs font-medium">Porcje, status i notatka</summary>
-            <form action={updateMealPlanDetailsAction} className="mt-2 space-y-2">
+            <FeedbackForm
+              action={updateMealPlanDetailsAction}
+              successMessage="Zapisano szczegóły posiłku"
+              errorMessage="Nie udało się zapisać szczegółów"
+              className="mt-2 space-y-2"
+            >
               <input type="hidden" name="entryId" value={entry.id} />
               <input className="h-11 w-full rounded-lg border bg-background px-2" type="number" min="1" name="servings" defaultValue={entry.servings} aria-label="Liczba porcji" />
               <select className="h-11 w-full rounded-lg border bg-background px-2" name="status" defaultValue={entry.status} aria-label="Status posiłku">
@@ -372,7 +630,7 @@ function PlanEntryCard({
                 Gotowanie na kilka dni
               </label>
               <Button type="submit" size="sm">Zapisz</Button>
-            </form>
+            </FeedbackForm>
           </details>
         </div>
       ) : null}
@@ -404,31 +662,13 @@ function MoveOrCopyForm({
       </select>
       <div className="flex gap-2">
         <Button type="button" size="sm" onClick={() => void onMove(date, mealType).catch(() => undefined)}>Przenieś</Button>
-        <form action={copyMealPlanEntryToAction}>
+        <FeedbackForm action={copyMealPlanEntryToAction} successMessage="Skopiowano posiłek">
           <input type="hidden" name="entryId" value={entry.id} />
           <input type="hidden" name="date" value={date} />
           <input type="hidden" name="mealType" value={mealType} />
           <Button type="submit" size="sm" variant="secondary">Kopiuj</Button>
-        </form>
+        </FeedbackForm>
       </div>
     </div>
-  );
-}
-
-function AddRecipeSelect({ recipes, onAdd }: { recipes: Recipe[]; onAdd: (id: string) => void }) {
-  if (!recipes.length) return null;
-  return (
-    <Select onValueChange={onAdd}>
-      <SelectTrigger className="h-8 mt-1">
-        <SelectValue placeholder="+ Dodaj przepis" />
-      </SelectTrigger>
-      <SelectContent>
-        {recipes.map((r) => (
-          <SelectItem key={r.id} value={r.id}>
-            {r.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }

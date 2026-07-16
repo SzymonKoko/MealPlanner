@@ -36,6 +36,59 @@ export function aggregateShoppingItems(items: AggregatedItem[]): AggregatedItem[
   return Array.from(aggregated.values());
 }
 
+async function collectFromRecipeEntry(
+  householdId: string,
+  recipeId: string,
+  servings: number,
+): Promise<AggregatedItem[]> {
+  const recipe = await getRecipe(householdId, recipeId);
+  if (!recipe) return [];
+
+  const recipeIngs = await getRecipeIngredients(recipeId);
+  const scaled = scaleRecipeIngredients(
+    recipeIngs.map((ri) => ({ quantity: ri.quantity, unit: ri.unit })),
+    recipe.servings,
+    servings,
+  );
+
+  const collected: AggregatedItem[] = [];
+  for (let i = 0; i < recipeIngs.length; i++) {
+    const ri = recipeIngs[i];
+    const scaledIng = scaled[i];
+    if (ri.optional) continue;
+
+    let name = "Nieznany składnik";
+    let categoryId: string | null = null;
+
+    if (ri.ingredientId) {
+      const ingredient = await getIngredient(householdId, ri.ingredientId);
+      if (ingredient) {
+        name = ingredient.name;
+        categoryId = ingredient.categoryId;
+      }
+    } else if (ri.productId) {
+      const [product] = await db
+        .select()
+        .from(products)
+        .where(and(eq(products.id, ri.productId), eq(products.householdId, householdId)))
+        .limit(1);
+      if (product) {
+        name = product.name;
+      }
+    }
+
+    collected.push({
+      ingredientId: ri.ingredientId,
+      productId: ri.productId,
+      name,
+      quantity: Number.parseFloat(scaledIng.quantity),
+      unit: scaledIng.unit,
+      categoryId,
+    });
+  }
+  return collected;
+}
+
 export async function collectIngredientsFromPlan(
   householdId: string,
   dateFrom: string,
@@ -45,49 +98,52 @@ export async function collectIngredientsFromPlan(
   const collected: AggregatedItem[] = [];
 
   for (const entry of entries) {
-    const recipe = await getRecipe(householdId, entry.recipeId);
-    if (!recipe) continue;
+    if (entry.recipeId) {
+      collected.push(...(await collectFromRecipeEntry(householdId, entry.recipeId, entry.servings)));
+      continue;
+    }
 
-    const recipeIngs = await getRecipeIngredients(entry.recipeId);
-    const scaled = scaleRecipeIngredients(
-      recipeIngs.map((ri) => ({ quantity: ri.quantity, unit: ri.unit })),
-      recipe.servings,
-      entry.servings,
-    );
-
-    for (let i = 0; i < recipeIngs.length; i++) {
-      const ri = recipeIngs[i];
-      const scaledIng = scaled[i];
-      if (ri.optional) continue;
-
-      let name = "Nieznany składnik";
-      let categoryId: string | null = null;
-
-      if (ri.ingredientId) {
-        const ingredient = await getIngredient(householdId, ri.ingredientId);
-        if (ingredient) {
-          name = ingredient.name;
-          categoryId = ingredient.categoryId;
-        }
-      } else if (ri.productId) {
-        const [product] = await db
-          .select()
-          .from(products)
-          .where(and(eq(products.id, ri.productId), eq(products.householdId, householdId)))
-          .limit(1);
-        if (product) {
-          name = product.name;
-        }
-      }
-
+    if (entry.ingredientId) {
+      const ingredient = await getIngredient(householdId, entry.ingredientId);
+      if (!ingredient) continue;
+      // Jedna porcja składnika ≈ 100 jednostek bazowych (g/ml).
       collected.push({
-        ingredientId: ri.ingredientId,
-        productId: ri.productId,
-        name,
-        quantity: Number.parseFloat(scaledIng.quantity),
-        unit: scaledIng.unit,
-        categoryId,
+        ingredientId: ingredient.id,
+        productId: null,
+        name: ingredient.name,
+        quantity: entry.servings * 100,
+        unit: ingredient.baseUnit,
+        categoryId: ingredient.categoryId,
       });
+      continue;
+    }
+
+    if (entry.productId) {
+      const [product] = await db
+        .select()
+        .from(products)
+        .where(and(eq(products.id, entry.productId), eq(products.householdId, householdId)))
+        .limit(1);
+      if (!product) continue;
+      if (product.packageQuantity && product.packageUnit) {
+        collected.push({
+          ingredientId: product.ingredientId,
+          productId: product.id,
+          name: product.name,
+          quantity: entry.servings * Number.parseFloat(product.packageQuantity),
+          unit: product.packageUnit,
+          categoryId: null,
+        });
+      } else {
+        collected.push({
+          ingredientId: product.ingredientId,
+          productId: product.id,
+          name: product.name,
+          quantity: entry.servings,
+          unit: "szt",
+          categoryId: null,
+        });
+      }
     }
   }
 

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,14 +163,19 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
 
       if (initialData) {
         await updateRecipeAction(initialData.id, formData);
+        toast.success("Zapisano przepis");
         router.push(`/recipes/${initialData.id}`);
       } else {
         const recipe = await createRecipeAction(formData);
+        toast.success("Utworzono przepis");
         router.push(`/recipes/${recipe.id}`);
       }
       router.refresh();
     } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : "Nie udało się zapisać przepisu");
+      const message =
+        submissionError instanceof Error ? submissionError.message : "Nie udało się zapisać przepisu";
+      setError(message);
+      toast.error(message);
     } finally {
       setPending(false);
     }
