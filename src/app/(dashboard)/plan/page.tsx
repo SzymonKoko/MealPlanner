@@ -8,17 +8,35 @@ import {
 } from "@/modules/ingredients/repository/ingredient-repository";
 import { getHouseholdMembers } from "@/modules/households/repository/household-repository";
 import { MealPlanView } from "@/modules/meal-planner/components/meal-plan-view";
-import { formatDateISO, getWeekStart } from "@/lib/dates";
+import { formatDateISO, getWeekStart, parseDateParam } from "@/lib/dates";
 import { canEdit } from "@/modules/households/services/role-checks";
+import { addDays, format, parseISO } from "date-fns";
 
 interface PlanPageProps {
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; view?: string; day?: string }>;
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
   const { householdId, role } = await requireActiveHouseholdOrRedirect();
   const params = await searchParams;
-  const weekStart = params.week ?? formatDateISO(getWeekStart());
+
+  const today = formatDateISO(new Date());
+  const view = params.view === "week" ? "week" : "day";
+
+  let weekStart = params.week ?? formatDateISO(getWeekStart());
+  let selectedDay = params.day ?? today;
+
+  if (params.day && parseDateParam(params.day)) {
+    selectedDay = params.day;
+    if (!params.week) {
+      weekStart = formatDateISO(getWeekStart(parseISO(selectedDay)));
+    }
+  } else if (!params.day) {
+    const weekDays = Array.from({ length: 7 }, (_, i) =>
+      format(addDays(parseISO(weekStart), i), "yyyy-MM-dd"),
+    );
+    selectedDay = weekDays.includes(today) ? today : weekStart;
+  }
 
   const [plan, recipes, ingredientRows, productRows, members] = await Promise.all([
     getMealPlanForWeek(householdId, weekStart),
@@ -66,9 +84,11 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
   return (
     <DashboardShell>
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Plan tygodniowy</h1>
+        <h1 className="text-2xl font-bold">Plan posiłków</h1>
         <MealPlanView
           weekStart={weekStart}
+          selectedDay={selectedDay}
+          view={view}
           entries={entries}
           assignments={assignments}
           recipes={recipes.map((r) => ({ id: r.id, name: r.name, kind: "recipe" as const }))}

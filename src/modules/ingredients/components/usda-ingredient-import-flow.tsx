@@ -215,6 +215,15 @@ export function UsdaIngredientImportFlow({
                   </select>
                 </div>
               </div>
+              <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="verifiedByUser" value="true" defaultChecked />
+                  Dane zostały przejrzane przed zapisem
+                </label>
+                <Button type="submit" className="w-full sm:w-auto">
+                  Zapisz składnik lokalnie
+                </Button>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Oryginalna nazwa USDA</Label>
@@ -318,11 +327,6 @@ export function UsdaIngredientImportFlow({
                   </div>
                 </fieldset>
               ) : null}
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="verifiedByUser" value="true" defaultChecked />
-                Dane zostały przejrzane przed zapisem
-              </label>
-              <Button type="submit">Zapisz składnik lokalnie</Button>
             </form>
           </CardContent>
         </Card>
