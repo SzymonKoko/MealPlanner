@@ -6,6 +6,7 @@ import {
 } from "@/lib/nutrition";
 import Decimal from "decimal.js";
 import type { NutritionBasis } from "@/db/schema/ingredients";
+import type { IngredientUnitConversion } from "@/lib/units";
 
 export interface RecipeIngredientInput {
   quantity: string;
@@ -19,6 +20,9 @@ export interface RecipeIngredientInput {
   saltPer100?: string | null;
   nutritionBasis: NutritionBasis;
   densityGramsPerMl?: string | null;
+  unitConversions?: IngredientUnitConversion[];
+  packageQuantity?: string | null;
+  packageUnit?: string | null;
 }
 
 export function calculateRecipeNutrition(

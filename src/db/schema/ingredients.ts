@@ -112,7 +112,29 @@ export const products = pgTable("products", {
   uniqueIndex("products_household_source_external_idx")
     .on(table.householdId, table.dataSource, table.externalId)
     .where(sql`${table.externalId} is not null`),
+  uniqueIndex("products_household_barcode_idx")
+    .on(table.householdId, table.barcode)
+    .where(sql`${table.barcode} is not null`),
 ]);
+
+export const ingredientUnitConversions = pgTable(
+  "ingredient_unit_conversions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ingredientId: uuid("ingredient_id")
+      .notNull()
+      .references(() => ingredients.id, { onDelete: "cascade" }),
+    unit: text("unit").notNull(),
+    gramsEquivalent: numeric("grams_equivalent", { precision: 12, scale: 4 }).notNull(),
+    label: text("label"),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ingredient_unit_conversions_unique_unit_idx").on(table.ingredientId, table.unit),
+  ],
+);
 
 export const ingredientTags = pgTable(
   "ingredient_tags",

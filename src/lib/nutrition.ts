@@ -1,4 +1,8 @@
-import { convertToBaseUnit } from "./units";
+import {
+  convertToBaseUnit,
+  convertWithIngredientConversions,
+  type IngredientUnitConversion,
+} from "./units";
 import Decimal from "decimal.js";
 import type { NutritionBasis } from "@/db/schema/ingredients";
 
@@ -20,6 +24,9 @@ export interface NutritionPer100 {
   saltPer100?: string | null;
   nutritionBasis: NutritionBasis;
   densityGramsPerMl?: string | null;
+  unitConversions?: IngredientUnitConversion[];
+  packageQuantity?: string | null;
+  packageUnit?: string | null;
 }
 
 export const EMPTY_NUTRITION: NutritionValues = {
@@ -49,13 +56,29 @@ export function calculateNutritionForQuantity(
   unit: string,
 ): NutritionValues {
   const basisUnit = nutrition.nutritionBasis === "per100ml" ? "ml" : "g";
-  const baseQuantity = convertToBaseUnit(
-    new Decimal(quantity || 0).toNumber(),
-    unit,
-    basisUnit,
-    parseDecimal(nutrition.densityGramsPerMl),
-  );
+  const numericQuantity = new Decimal(quantity || 0).toNumber();
+  const baseQuantity =
+    unit === "opakowanie" && nutrition.packageQuantity && nutrition.packageUnit
+      ? (() => {
+          const packageAmount = new Decimal(nutrition.packageQuantity).mul(numericQuantity).toNumber();
+          return convertToBaseUnit(
+            packageAmount,
+            nutrition.packageUnit,
+            basisUnit,
+            parseDecimal(nutrition.densityGramsPerMl),
+          );
+        })()
+      : convertWithIngredientConversions(
+          numericQuantity,
+          unit,
+          basisUnit,
+          parseDecimal(nutrition.densityGramsPerMl),
+          nutrition.unitConversions,
+        );
   if (baseQuantity === null) {
+    if (["szt", "lyzka", "lyzeczka", "szklanka", "opakowanie"].includes(unit)) {
+      throw new Error(`Brak konwersji jednostki ${unit} dla tego składnika. Dodaj gramaturę.`);
+    }
     throw new Error(`Nie można przeliczyć jednostki ${unit} na ${basisUnit} bez gęstości`);
   }
 

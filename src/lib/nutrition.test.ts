@@ -6,7 +6,7 @@ import {
   perServing,
   parseDecimal,
 } from "@/lib/nutrition";
-import { addQuantities, convertToBaseUnit } from "@/lib/units";
+import { addQuantities, convertToBaseUnit, convertWithIngredientConversions } from "@/lib/units";
 import { calculateRecipeNutrition, scaleRecipeIngredients } from "@/modules/recipes/services/nutrition-calculator";
 import { hasMinimumRole } from "@/modules/households/services/role-checks";
 
@@ -76,6 +76,33 @@ describe("nutrition", () => {
     ).toThrow(/bez gęstości/);
   });
 
+  it("uses ingredient-specific conversions for pieces", () => {
+    const result = calculateNutritionForQuantity(
+      {
+        nutritionBasis: "per100g",
+        kcalPer100: "155",
+        unitConversions: [{ unit: "szt", gramsEquivalent: 55 }],
+      },
+      "2",
+      "szt",
+    );
+    expect(result.kcal).toBe(170.5);
+  });
+
+  it("uses package size for product package unit", () => {
+    const result = calculateNutritionForQuantity(
+      {
+        nutritionBasis: "per100g",
+        kcalPer100: "250",
+        packageQuantity: "400",
+        packageUnit: "g",
+      },
+      "0.5",
+      "opakowanie",
+    );
+    expect(result.kcal).toBe(500);
+  });
+
   it("sums nutrition values", () => {
     const total = sumNutrition([
       { kcal: 100, protein: 10, carbs: 20, fat: 5, fiber: 2, salt: 0.1 },
@@ -117,6 +144,18 @@ describe("units", () => {
     expect(convertToBaseUnit(100, "ml", "g", 1.2)).toBe(120);
     expect(convertToBaseUnit(100, "ml", "g")).toBeNull();
   });
+
+  it("does not use a global tablespoon conversion", () => {
+    expect(convertWithIngredientConversions(1, "lyzka", "g")).toBeNull();
+  });
+
+  it("converts tablespoon only when ingredient-specific mapping exists", () => {
+    expect(
+      convertWithIngredientConversions(2, "lyzka", "g", null, [
+        { unit: "lyzka", gramsEquivalent: 10 },
+      ]),
+    ).toBe(20);
+  });
 });
 
 describe("recipe nutrition calculator", () => {
@@ -141,6 +180,32 @@ describe("recipe nutrition calculator", () => {
     expect(result.total.kcal).toBe(200);
     expect(result.perServing.kcal).toBe(100);
     expect(result.total.salt).toBe(1);
+  });
+
+  it("calculates recipe nutrition with mixed recipe units", () => {
+    const result = calculateRecipeNutrition(
+      [
+        {
+          quantity: "2",
+          unit: "szt",
+          optional: false,
+          nutritionBasis: "per100g",
+          kcalPer100: "155",
+          unitConversions: [{ unit: "szt", gramsEquivalent: 55 }],
+        },
+        {
+          quantity: "3",
+          unit: "lyzka",
+          optional: false,
+          nutritionBasis: "per100g",
+          kcalPer100: "884",
+          unitConversions: [{ unit: "lyzka", gramsEquivalent: 10 }],
+        },
+      ],
+      2,
+    );
+    expect(result.total.kcal).toBe(435.7);
+    expect(result.perServing.kcal).toBe(217.85);
   });
 
   it("scales recipe ingredients", () => {

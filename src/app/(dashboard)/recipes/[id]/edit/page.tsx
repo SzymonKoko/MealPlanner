@@ -9,6 +9,7 @@ import {
   listIngredients,
   listProducts,
   listTags,
+  getIngredientUnitConversions,
 } from "@/modules/ingredients/repository/ingredient-repository";
 import { RecipeForm } from "@/modules/recipes/components/recipe-form";
 
@@ -27,6 +28,13 @@ export default async function EditRecipePage({ params }: EditRecipePageProps) {
     getRecipeTags(id),
   ]);
   if (!data) notFound();
+  const ingredientConversions = await getIngredientUnitConversions(ingredients.map((ingredient) => ingredient.id));
+  const conversionsByIngredient = new Map<string, typeof ingredientConversions>();
+  for (const conversion of ingredientConversions) {
+    const current = conversionsByIngredient.get(conversion.ingredientId) ?? [];
+    current.push(conversion);
+    conversionsByIngredient.set(conversion.ingredientId, current);
+  }
 
   return (
     <DashboardShell>
@@ -44,6 +52,7 @@ export default async function EditRecipePage({ params }: EditRecipePageProps) {
             fiberPer100: item.fiberPer100,
             saltPer100: item.saltPer100,
             densityGramsPerMl: item.densityGramsPerMl,
+            unitConversions: conversionsByIngredient.get(item.id) ?? [],
           })),
           ...products.map((item) => ({
             id: item.id,
@@ -59,6 +68,11 @@ export default async function EditRecipePage({ params }: EditRecipePageProps) {
             densityGramsPerMl:
               ingredients.find((ingredient) => ingredient.id === item.ingredientId)
                 ?.densityGramsPerMl ?? null,
+            unitConversions: item.ingredientId
+              ? conversionsByIngredient.get(item.ingredientId) ?? []
+              : [],
+            packageQuantity: item.packageQuantity,
+            packageUnit: item.packageUnit,
           })),
         ]}
         tags={tags.map((tag) => ({ id: tag.id, name: tag.name }))}

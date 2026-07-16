@@ -73,9 +73,12 @@ AUTHENTIK_CLIENT_ID
 AUTHENTIK_CLIENT_SECRET
 APP_URL
 UPLOAD_DIR
+USDA_API_KEY
 ```
 
 Nie commitować pliku `.env`.
+
+`USDA_API_KEY` jest wymagany tylko wtedy, gdy włączony jest import ogólnych składników z USDA FoodData Central.
 
 Dodać `.env.example`.
 

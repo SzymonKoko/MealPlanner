@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SUPPORTED_UNITS } from "@/lib/units";
+import { RECIPE_SUPPORTED_UNITS } from "@/lib/units";
 
 export const recipeIngredientSchema = z
   .object({
@@ -10,7 +10,7 @@ export const recipeIngredientSchema = z
       .regex(/^\d+([.,]\d+)?$/, "Ilość musi być liczbą dodatnią")
       .transform((value) => value.replace(",", "."))
       .refine((value) => Number(value) > 0, "Ilość musi być większa od zera"),
-    unit: z.enum(SUPPORTED_UNITS),
+    unit: z.enum(RECIPE_SUPPORTED_UNITS),
     optional: z.boolean().default(false),
     sortOrder: z.number().int().default(0),
   })

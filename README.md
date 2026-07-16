@@ -137,9 +137,16 @@ Pełna specyfikacja: [`docs/meal-planner-spec/`](docs/meal-planner-spec/)
 9. PWA manifest + service worker
 10. Mobile-first UI z dolną nawigacją
 
+## Integracje z bazami żywności
+
+- `Open Food Facts` służy do konkretnych produktów sklepowych z kodem kreskowym.
+- `USDA FoodData Central` służy do ogólnych składników, np. ryż, jajko, banan, pierś z kurczaka.
+- Dane z USDA są wyszukiwane wyłącznie po stronie backendu; frontend nie otrzymuje klucza API.
+- Aby włączyć import składników z USDA, ustaw `USDA_API_KEY` w `.env`.
+
 ## Znane ograniczenia MVP
 
-- Brak spiżarni, OCR, Open Food Facts
+- Brak spiżarni i OCR
 - Zaproszenia bez automatycznego e-maila (link do skopiowania)
 - Offline sync checkboxów: last-write-wins via localStorage
-- Konwersje jednostek: podstawowy zestaw (g, kg, ml, l, szt.)
+- Konwersje jednostek domowych wymagają jawnego przelicznika dla konkretnego składnika

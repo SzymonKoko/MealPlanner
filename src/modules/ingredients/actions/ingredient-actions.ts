@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import {
   requireActiveHousehold,
   requireActiveHouseholdEditor,
@@ -8,11 +9,13 @@ import {
 import {
   ingredientCreateSchema,
   ingredientUpdateSchema,
+  ingredientUnitConversionSchema,
   productCreateSchema,
   productUpdateSchema,
   categorySchema,
   tagSchema,
 } from "../validators/ingredient-schemas";
+import { approveUsdaIngredientSchema } from "../validators/usda-import-schemas";
 import {
   createIngredient,
   updateIngredient,
@@ -29,6 +32,7 @@ import {
   updateCategory,
   updateTag,
   getProduct,
+  replaceIngredientUnitConversions,
 } from "../repository/ingredient-repository";
 import { AppError } from "@/lib/errors";
 import { db } from "@/db/client";
@@ -328,4 +332,144 @@ export async function deleteIngredientFormAction(formData: FormData) {
 export async function searchIngredientsAction(query: string) {
   const { householdId } = await requireActiveHousehold();
   return listIngredients(householdId, query);
+}
+
+function parseIngredientConversions(formData: FormData) {
+  const units = formData.getAll("conversionUnit");
+  const grams = formData.getAll("conversionGrams");
+  const labels = formData.getAll("conversionLabel");
+  const defaults = new Set(formData.getAll("conversionDefault").map(String));
+
+  return units.flatMap((unit, index) => {
+    const normalizedUnit = String(unit).trim();
+    const normalizedGrams = String(grams[index] ?? "").trim();
+    const normalizedLabel = String(labels[index] ?? "").trim();
+    if (!normalizedUnit || !normalizedGrams) return [];
+    const parsed = ingredientUnitConversionSchema.safeParse({
+      unit: normalizedUnit,
+      gramsEquivalent: normalizedGrams,
+      label: normalizedLabel || undefined,
+      isDefault: defaults.has(normalizedUnit),
+    });
+    if (!parsed.success) {
+      throw new AppError(
+        parsed.error.errors[0]?.message ?? "Nieprawidłowa konwersja jednostki",
+        "VALIDATION_ERROR",
+      );
+    }
+    return [parsed.data];
+  });
+}
+
+export async function replaceIngredientUnitConversionsAction(id: string, formData: FormData) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  const ingredient = await getIngredient(householdId, id);
+  if (!ingredient) {
+    throw new AppError("Składnik nie istnieje", "NOT_FOUND", 404);
+  }
+  const conversions = parseIngredientConversions(formData);
+  await replaceIngredientUnitConversions(id, conversions.map((conversion) => ({
+    unit: conversion.unit,
+    gramsEquivalent: conversion.gramsEquivalent!,
+    label: conversion.label,
+    isDefault: conversion.isDefault,
+  })));
+  revalidatePath("/ingredients");
+}
+
+export async function approveUsdaIngredientAction(formData: FormData) {
+  const { householdId, user } = await requireActiveHouseholdEditor();
+  const parsed = approveUsdaIngredientSchema.safeParse({
+    name: formData.get("name"),
+    description: formData.get("description") || undefined,
+    categoryId: formData.get("categoryId") || null,
+    baseUnit: formData.get("baseUnit") || "g",
+    kcalPer100: formData.get("kcalPer100") || undefined,
+    proteinPer100: formData.get("proteinPer100") || undefined,
+    carbsPer100: formData.get("carbsPer100") || undefined,
+    fatPer100: formData.get("fatPer100") || undefined,
+    fiberPer100: formData.get("fiberPer100") || undefined,
+    saltPer100: formData.get("saltPer100") || undefined,
+    nutritionBasis: "per100g",
+    densityGramsPerMl: formData.get("densityGramsPerMl") || undefined,
+    allergens: formData.get("allergens") || undefined,
+    verifiedByUser: formData.get("verifiedByUser") === "true",
+    tagIds: formData.getAll("tagIds"),
+    externalId: formData.get("externalId"),
+    sourceUpdatedAt: formData.get("sourceUpdatedAt") || undefined,
+    originalName: formData.get("originalName"),
+    dataSource: "usda",
+    foodCategory: formData.get("foodCategory") || undefined,
+    dataType: formData.get("dataType") || undefined,
+    translatedQuery: formData.get("translatedQuery") || undefined,
+    conversions: parseIngredientConversions(formData),
+  });
+
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+
+  const { tagIds, conversions, ...data } = parsed.data;
+  await validateIngredientReferences(householdId, data.categoryId, tagIds);
+
+  const descriptionParts = [data.description, data.foodCategory, data.dataType]
+    .filter(Boolean)
+    .map(String);
+  const baselineMatches = (field: string, current?: string) =>
+    String(formData.get(field) ?? "").trim() === String(current ?? "").trim();
+  const manuallyModified =
+    !baselineMatches("baselineDescription", data.description) ||
+    !baselineMatches("baselineKcalPer100", data.kcalPer100) ||
+    !baselineMatches("baselineProteinPer100", data.proteinPer100) ||
+    !baselineMatches("baselineCarbsPer100", data.carbsPer100) ||
+    !baselineMatches("baselineFatPer100", data.fatPer100) ||
+    !baselineMatches("baselineFiberPer100", data.fiberPer100) ||
+    !baselineMatches("baselineSaltPer100", data.saltPer100) ||
+    Boolean(data.densityGramsPerMl) ||
+    Boolean(data.allergens) ||
+    (conversions?.length ?? 0) > 0 ||
+    data.baseUnit !== "g";
+
+  const ingredient = await createIngredient(
+    householdId,
+    user.id,
+    {
+      name: data.name,
+      description: descriptionParts.join(" | ") || null,
+      categoryId: data.categoryId,
+      baseUnit: data.baseUnit,
+      nutritionBasis: data.nutritionBasis,
+      kcalPer100: data.kcalPer100,
+      proteinPer100: data.proteinPer100,
+      carbsPer100: data.carbsPer100,
+      fatPer100: data.fatPer100,
+      fiberPer100: data.fiberPer100,
+      saltPer100: data.saltPer100,
+      densityGramsPerMl: data.densityGramsPerMl,
+      allergens: data.allergens,
+      dataSource: manuallyModified ? "household_override" : "usda",
+      externalId: data.externalId,
+      importedAt: new Date(),
+      sourceUpdatedAt: data.sourceUpdatedAt ?? null,
+      verifiedByUser: true,
+      manuallyModified,
+    },
+    tagIds,
+  );
+
+  if (conversions?.length) {
+    await replaceIngredientUnitConversions(
+      ingredient.id,
+      conversions.map((conversion) => ({
+        unit: conversion.unit,
+        gramsEquivalent: conversion.gramsEquivalent!,
+        label: conversion.label,
+        isDefault: conversion.isDefault,
+      })),
+    );
+  }
+
+  revalidatePath("/ingredients");
+  revalidatePath("/ingredients/usda");
+  redirect("/ingredients");
 }

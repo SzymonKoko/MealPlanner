@@ -1,4 +1,5 @@
 import { DashboardShell } from "@/components/shared/dashboard-shell";
+import Link from "next/link";
 import { requireActiveHouseholdOrRedirect } from "@/server/require-household-member";
 import {
   listIngredients,
@@ -7,6 +8,7 @@ import {
   listTags,
   getIngredientTags,
   getProductTags,
+  getIngredientUnitConversions,
 } from "@/modules/ingredients/repository/ingredient-repository";
 import {
   createIngredientAction,
@@ -21,6 +23,7 @@ import {
   deleteTagAction,
   updateCategoryAction,
   updateTagAction,
+  replaceIngredientUnitConversionsAction,
 } from "@/modules/ingredients/actions/ingredient-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +37,7 @@ type Product = Awaited<ReturnType<typeof listProducts>>[number];
 type Category = Awaited<ReturnType<typeof listCategories>>[number];
 type Tag = Awaited<ReturnType<typeof listTags>>[number];
 type FormAction = (formData: FormData) => Promise<void>;
+type IngredientUnitConversion = Awaited<ReturnType<typeof getIngredientUnitConversions>>[number];
 
 function NutritionFields({
   values,
@@ -203,6 +207,58 @@ function IngredientForm({
   );
 }
 
+function IngredientConversionsForm({
+  ingredientId,
+  conversions,
+}: {
+  ingredientId: string;
+  conversions: IngredientUnitConversion[];
+}) {
+  const rows = conversions.length
+    ? conversions
+    : [
+        { id: "new-1", unit: "szt", gramsEquivalent: "", label: null, isDefault: false },
+        { id: "new-2", unit: "lyzka", gramsEquivalent: "", label: null, isDefault: false },
+        { id: "new-3", unit: "lyzeczka", gramsEquivalent: "", label: null, isDefault: false },
+        { id: "new-4", unit: "szklanka", gramsEquivalent: "", label: null, isDefault: false },
+      ];
+  return (
+    <form action={replaceIngredientUnitConversionsAction.bind(null, ingredientId)} className="space-y-3">
+      <p className="text-sm font-medium">Konwersje jednostek składnika</p>
+      <p className="text-xs text-muted-foreground">
+        Dodaj tylko przeliczniki specyficzne dla tego składnika, np. `1 szt = 55 g`.
+      </p>
+      {rows.map((conversion, index) => (
+        <div key={`${conversion.unit}-${index}`} className="grid gap-2 sm:grid-cols-[10rem_1fr_1fr]">
+          <select
+            name="conversionUnit"
+            defaultValue={conversion.unit}
+            className="flex h-11 rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            <option value="szt">szt</option>
+            <option value="lyzka">łyżka</option>
+            <option value="lyzeczka">łyżeczka</option>
+            <option value="szklanka">szklanka</option>
+            <option value="opakowanie">opakowanie</option>
+          </select>
+          <Input
+            name="conversionGrams"
+            type="number"
+            min="0.0001"
+            step="0.0001"
+            defaultValue={String(conversion.gramsEquivalent ?? "")}
+            placeholder="gramów"
+          />
+          <Input name="conversionLabel" defaultValue={conversion.label ?? ""} placeholder="np. średnie jajko" />
+        </div>
+      ))}
+      <Button type="submit" variant="outline" size="sm">
+        Zapisz konwersje
+      </Button>
+    </form>
+  );
+}
+
 function ProductForm({
   action,
   product,
@@ -321,12 +377,21 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
     listIngredients(householdId),
   ]);
   const ingredientTags = await getIngredientTags(listedIngredients.map((ingredient) => ingredient.id));
+  const ingredientConversions = await getIngredientUnitConversions(
+    listedIngredients.map((ingredient) => ingredient.id),
+  );
   const productTagRelations = await getProductTags(products.map((product) => product.id));
   const tagIdsByIngredient = new Map<string, Set<string>>();
   for (const relation of ingredientTags) {
     const current = tagIdsByIngredient.get(relation.ingredientId) ?? new Set<string>();
     current.add(relation.tagId);
     tagIdsByIngredient.set(relation.ingredientId, current);
+  }
+  const conversionsByIngredient = new Map<string, IngredientUnitConversion[]>();
+  for (const conversion of ingredientConversions) {
+    const current = conversionsByIngredient.get(conversion.ingredientId) ?? [];
+    current.push(conversion);
+    conversionsByIngredient.set(conversion.ingredientId, current);
   }
   const ingredients = tag
     ? listedIngredients.filter((ingredient) => tagIdsByIngredient.get(ingredient.id)?.has(tag))
@@ -344,6 +409,16 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
     <DashboardShell>
       <div className="space-y-8">
         <h1 className="text-2xl font-bold">Składniki i produkty</h1>
+        {editable ? (
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/ingredients/scan">Skanuj kod kreskowy</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/ingredients/usda">Wyszukaj składnik w USDA</Link>
+            </Button>
+          </div>
+        ) : null}
 
         <form className="grid gap-2 sm:grid-cols-[1fr_13rem_13rem_auto]" method="get">
           <Input name="q" defaultValue={search} placeholder="Nazwa, marka lub kod kreskowy" />
@@ -378,8 +453,13 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
           <>
             <div className="grid gap-6 lg:grid-cols-2">
               <Card>
-                <CardHeader><CardTitle>Dodaj składnik</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle>Dodaj składnik</CardTitle>
+                </CardHeader>
                 <CardContent>
+                  <div className="mb-4 rounded-lg border p-3 text-sm text-muted-foreground">
+                    Dla ogólnych składników możesz użyć importu z USDA, a dla produktów sklepowych skanowania kodu kreskowego z Open Food Facts.
+                  </div>
                   <IngredientForm
                     action={createIngredientAction}
                     categories={categories}
@@ -493,6 +573,12 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
                           selectedTagIds={tagIdsByIngredient.get(ing.id)}
                           submitLabel="Zapisz zmiany"
                         />
+                        <div className="mt-4 border-t pt-4">
+                          <IngredientConversionsForm
+                            ingredientId={ing.id}
+                            conversions={conversionsByIngredient.get(ing.id) ?? []}
+                          />
+                        </div>
                       </div>
                     </details>
                   ) : null}
@@ -529,9 +615,18 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
                       </p>
                     </div>
                     {editable ? (
-                      <form action={deleteProductAction.bind(null, prod.id)}>
-                        <Button type="submit" variant="ghost" size="sm" className="text-destructive">Usuń</Button>
-                      </form>
+                      <div className="flex flex-wrap gap-2">
+                        {prod.barcode ? (
+                          <Button asChild type="button" variant="outline" size="sm">
+                            <Link href={`/ingredients/scan?barcode=${encodeURIComponent(prod.barcode)}&refresh=1`}>
+                              Odśwież z OFF
+                            </Link>
+                          </Button>
+                        ) : null}
+                        <form action={deleteProductAction.bind(null, prod.id)}>
+                          <Button type="submit" variant="ghost" size="sm" className="text-destructive">Usuń</Button>
+                        </form>
+                      </div>
                     ) : null}
                   </div>
                   {editable ? (

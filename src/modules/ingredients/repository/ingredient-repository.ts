@@ -6,6 +6,7 @@ import {
   tags,
   ingredientTags,
   productTags,
+  ingredientUnitConversions,
 } from "@/db/schema";
 import { and, eq, ilike, isNull, inArray, or } from "drizzle-orm";
 
@@ -128,6 +129,15 @@ export async function getProduct(householdId: string, id: string) {
     .select()
     .from(products)
     .where(and(eq(products.id, id), eq(products.householdId, householdId)))
+    .limit(1);
+  return product ?? null;
+}
+
+export async function getProductByBarcode(householdId: string, barcode: string) {
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(and(eq(products.householdId, householdId), eq(products.barcode, barcode)))
     .limit(1);
   return product ?? null;
 }
@@ -260,4 +270,36 @@ export async function getIngredientTags(ingredientIds: string[]) {
 export async function getProductTags(productIds: string[]) {
   if (!productIds.length) return [];
   return db.select().from(productTags).where(inArray(productTags.productId, productIds));
+}
+
+export async function getIngredientUnitConversions(ingredientIds: string[]) {
+  if (!ingredientIds.length) return [];
+  return db
+    .select()
+    .from(ingredientUnitConversions)
+    .where(inArray(ingredientUnitConversions.ingredientId, ingredientIds));
+}
+
+export async function replaceIngredientUnitConversions(
+  ingredientId: string,
+  conversions: Array<{
+    unit: string;
+    gramsEquivalent: string;
+    label?: string;
+    isDefault?: boolean;
+  }>,
+) {
+  return db.transaction(async (tx) => {
+    await tx.delete(ingredientUnitConversions).where(eq(ingredientUnitConversions.ingredientId, ingredientId));
+    if (!conversions.length) return;
+    await tx.insert(ingredientUnitConversions).values(
+      conversions.map((conversion) => ({
+        ingredientId,
+        unit: conversion.unit,
+        gramsEquivalent: conversion.gramsEquivalent,
+        label: conversion.label ?? null,
+        isDefault: conversion.isDefault ?? false,
+      })),
+    );
+  });
 }
