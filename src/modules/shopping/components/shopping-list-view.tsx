@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { FeedbackForm } from "@/components/shared/feedback-form";
 import {
   toggleShoppingItemAction,
   addManualShoppingItemAction,
@@ -33,21 +36,24 @@ interface ShoppingListViewProps {
   editable: boolean;
 }
 
+function mergeWithOffline(listId: string, serverItems: ShoppingItem[]) {
+  const pending = readOfflineChanges(listId);
+  return serverItems.map((item) =>
+    pending[item.id] === undefined ? item : { ...item, checked: pending[item.id] },
+  );
+}
+
 export function ShoppingListView({ listId, items: initialItems, editable }: ShoppingListViewProps) {
-  const [items, setItems] = useState(initialItems);
+  const router = useRouter();
+  const [items, setItems] = useState(() => mergeWithOffline(listId, initialItems));
   const [isPending, startTransition] = useTransition();
   const [lastSync, setLastSync] = useState(new Date());
 
   useEffect(() => {
-    const pending = readOfflineChanges(listId);
-    if (Object.keys(pending).length) {
-      setItems((current) =>
-        current.map((item) =>
-          pending[item.id] === undefined ? item : { ...item, checked: pending[item.id] },
-        ),
-      );
-    }
+    setItems(mergeWithOffline(listId, initialItems));
+  }, [initialItems, listId]);
 
+  useEffect(() => {
     async function replayOfflineChanges() {
       const changes = readOfflineChanges(listId);
       for (const [itemId, checked] of Object.entries(changes)) {
@@ -61,6 +67,7 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
           return;
         }
       }
+      router.refresh();
     }
     void replayOfflineChanges();
     window.addEventListener("online", replayOfflineChanges);
@@ -74,14 +81,7 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
             window.location.reload();
             return;
           }
-          const localChanges = readOfflineChanges(listId);
-          setItems(
-            data.items.map((item: ShoppingItem) =>
-              localChanges[item.id] === undefined
-                ? item
-                : { ...item, checked: localChanges[item.id] },
-            ),
-          );
+          setItems(mergeWithOffline(listId, data.items));
           setLastSync(new Date());
         }
       } catch {
@@ -92,7 +92,7 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
       clearInterval(interval);
       window.removeEventListener("online", replayOfflineChanges);
     };
-  }, [listId]);
+  }, [listId, router]);
 
   function handleToggle(itemId: string, checked: boolean) {
     setItems((prev) =>
@@ -108,8 +108,10 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
       try {
         await toggleShoppingItemAction(formData);
         removeOfflineChange(listId, itemId);
+        router.refresh();
       } catch {
         cacheCheckboxOffline(listId, itemId, checked);
+        toast.error("Nie udało się zapisać zaznaczenia");
       }
     });
   }
@@ -124,21 +126,29 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
         {isPending ? " · zapisywanie..." : ""}
       </p>
 
-      {editable ? <form
-        action={addManualShoppingItemAction}
-        className="flex flex-wrap gap-2"
-      >
-        <input type="hidden" name="shoppingListId" value={listId} />
-        <Input name="name" placeholder="Nazwa produktu" className="flex-1 min-w-32" required />
-        <Input name="quantityToBuy" placeholder="Ilość" className="w-20" required defaultValue="1" />
-        <select name="unit" defaultValue="szt" className="h-11 rounded-lg border bg-background px-2">
-          {SUPPORTED_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-        </select>
-        <Input name="notes" placeholder="Komentarz" className="min-w-32 flex-1" />
-        <Button type="submit" size="sm">
-          Dodaj
-        </Button>
-      </form> : null}
+      {editable ? (
+        <FeedbackForm
+          action={addManualShoppingItemAction}
+          successMessage="Dodano pozycję do listy"
+          errorMessage="Nie udało się dodać pozycji"
+          className="flex flex-wrap gap-2"
+        >
+          <input type="hidden" name="shoppingListId" value={listId} />
+          <Input name="name" placeholder="Nazwa produktu" className="flex-1 min-w-32" required />
+          <Input name="quantityToBuy" placeholder="Ilość" className="w-20" required defaultValue="1" />
+          <select name="unit" defaultValue="szt" className="h-11 rounded-lg border bg-background px-2">
+            {SUPPORTED_UNITS.map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </select>
+          <Input name="notes" placeholder="Komentarz" className="min-w-32 flex-1" />
+          <Button type="submit" size="sm">
+            Dodaj
+          </Button>
+        </FeedbackForm>
+      ) : null}
 
       <GroupedItems items={unchecked} onToggle={handleToggle} editable={editable} />
 
@@ -208,22 +218,58 @@ function ShoppingItemRow({
         {editable && item.source === "manual" ? (
           <details>
             <summary className="cursor-pointer text-xs">Edytuj</summary>
-            <form action={updateManualShoppingItemAction.bind(null, item.id)} className="mt-2 space-y-2">
+            <FeedbackForm
+              action={updateManualShoppingItemAction.bind(null, item.id)}
+              successMessage="Zapisano pozycję"
+              errorMessage="Nie udało się zapisać pozycji"
+              className="mt-2 space-y-2"
+            >
               <Input name="name" defaultValue={item.name} required />
               <Input name="quantityToBuy" defaultValue={item.quantityToBuy} required />
               <select name="unit" defaultValue={item.unit} className="h-11 w-full rounded-lg border bg-background px-2">
-                {SUPPORTED_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                {SUPPORTED_UNITS.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
               </select>
               <Input name="notes" defaultValue={item.notes ?? ""} placeholder="Komentarz" />
               <div className="flex gap-2">
-                <Button type="submit" size="sm">Zapisz</Button>
-                <Button formAction={deleteManualShoppingItemAction.bind(null, item.id)} type="submit" size="sm" variant="ghost" className="text-destructive">Usuń</Button>
+                <Button type="submit" size="sm">
+                  Zapisz
+                </Button>
+                <DeleteManualItemButton itemId={item.id} />
               </div>
-            </form>
+            </FeedbackForm>
           </details>
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function DeleteManualItemButton({ itemId }: { itemId: string }) {
+  const router = useRouter();
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="text-destructive"
+      onClick={() => {
+        void (async () => {
+          try {
+            await deleteManualShoppingItemAction(itemId);
+            toast.success("Usunięto pozycję");
+            router.refresh();
+          } catch {
+            toast.error("Nie udało się usunąć pozycji");
+          }
+        })();
+      }}
+    >
+      Usuń
+    </Button>
   );
 }
 

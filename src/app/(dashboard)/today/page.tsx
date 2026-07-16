@@ -13,6 +13,8 @@ import Link from "next/link";
 import { listRecipes } from "@/modules/recipes/repository/recipe-repository";
 import { addMealPlanEntryAction } from "@/modules/meal-planner/actions/meal-plan-actions";
 import { canEdit } from "@/modules/households/services/role-checks";
+import { NutritionRing } from "@/modules/nutrition/components/nutrition-ring";
+import { FeedbackForm } from "@/components/shared/feedback-form";
 
 export default async function TodayPage() {
   const user = await requireAuth();
@@ -26,10 +28,14 @@ export default async function TodayPage() {
             <CardTitle>Utwórz gospodarstwo domowe</CardTitle>
           </CardHeader>
           <CardContent>
-            <form action={createHousehold} className="space-y-4">
+            <FeedbackForm
+              action={createHousehold}
+              successMessage="Utworzono gospodarstwo"
+              className="space-y-4"
+            >
               <Input name="name" placeholder="Nazwa gospodarstwa" required />
               <Button type="submit">Utwórz</Button>
-            </form>
+            </FeedbackForm>
           </CardContent>
         </Card>
       </DashboardShell>
@@ -62,7 +68,12 @@ export default async function TodayPage() {
           <Card>
             <CardHeader><CardTitle>Szybko dodaj posiłek</CardTitle></CardHeader>
             <CardContent>
-              <form action={addMealPlanEntryAction} className="grid gap-2 sm:grid-cols-[1fr_12rem_7rem_auto]">
+              <FeedbackForm
+                action={addMealPlanEntryAction}
+                successMessage="Dodano posiłek do planu"
+                errorMessage="Nie udało się dodać posiłku"
+                className="grid gap-2 sm:grid-cols-[1fr_12rem_7rem_auto]"
+              >
                 <select name="recipeId" className="h-11 rounded-lg border bg-background px-3" required>
                   <option value="">Wybierz przepis</option>
                   {recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
@@ -75,18 +86,18 @@ export default async function TodayPage() {
                 <Input name="servings" type="number" min="1" defaultValue="1" aria-label="Liczba porcji" />
                 <input type="hidden" name="date" value={today} />
                 <Button type="submit">Dodaj</Button>
-              </form>
+              </FeedbackForm>
             </CardContent>
           </Card>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <NutritionCard label="Kalorie" consumed={progress.kcal.consumed} target={progress.kcal.target} unit="kcal" />
-          <NutritionCard label="Białko" consumed={progress.protein.consumed} target={progress.protein.target} unit="g" />
-          <NutritionCard label="Węglowodany" consumed={progress.carbs.consumed} target={progress.carbs.target} unit="g" />
-          <NutritionCard label="Tłuszcze" consumed={progress.fat.consumed} target={progress.fat.target} unit="g" />
-          <NutritionCard label="Błonnik" consumed={progress.fiber.consumed} target={progress.fiber.target} unit="g" />
-          <NutritionCard label="Sól" consumed={nutrition.consumed.salt} target={0} unit="g" decimals={2} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <NutritionRing label="Kalorie" consumed={progress.kcal.consumed} target={progress.kcal.target} unit="kcal" color="#3d7a4a" />
+          <NutritionRing label="Białko" consumed={progress.protein.consumed} target={progress.protein.target} unit="g" color="#c45c26" />
+          <NutritionRing label="Węglowodany" consumed={progress.carbs.consumed} target={progress.carbs.target} unit="g" color="#c9a227" />
+          <NutritionRing label="Tłuszcze" consumed={progress.fat.consumed} target={progress.fat.target} unit="g" color="#2a6f8f" />
+          <NutritionRing label="Błonnik" consumed={progress.fiber.consumed} target={progress.fiber.target} unit="g" color="#6b8f4e" />
+          <NutritionRing label="Sól" consumed={nutrition.consumed.salt} target={0} unit="g" decimals={2} color="#8a6a4a" />
         </div>
 
         <Card>
@@ -112,37 +123,5 @@ export default async function TodayPage() {
         </Card>
       </div>
     </DashboardShell>
-  );
-}
-
-function NutritionCard({
-  label,
-  consumed,
-  target,
-  unit,
-  decimals = 0,
-}: {
-  label: string;
-  consumed: number;
-  target: number;
-  unit: string;
-  decimals?: number;
-}) {
-  const percent = target > 0 ? Math.min(100, (consumed / target) * 100) : 0;
-
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-xl font-semibold">
-          {consumed.toFixed(decimals)} / {target > 0 ? target.toFixed(decimals) : "—"} {unit}
-        </p>
-        {target > 0 ? (
-          <div className="mt-2 h-2 rounded-full bg-muted">
-            <div className="h-2 rounded-full bg-primary" style={{ width: `${percent}%` }} />
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
   );
 }

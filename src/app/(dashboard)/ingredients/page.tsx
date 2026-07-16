@@ -25,6 +25,7 @@ import {
   replaceIngredientUnitConversionsAction,
 } from "@/modules/ingredients/actions/ingredient-actions";
 import { AddIngredientPanel } from "@/modules/ingredients/components/add-ingredient-panel";
+import { FeedbackForm } from "@/components/shared/feedback-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -139,7 +140,11 @@ function CatalogItemForm({
   const asProduct = item && "barcode" in item ? (item as Product) : undefined;
 
   return (
-    <form action={action} className="space-y-3">
+    <FeedbackForm
+      action={action}
+      successMessage={item ? "Zapisano zmiany" : "Dodano pozycję"}
+      className="space-y-3"
+    >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field id={`${prefix}-name`} label="Nazwa">
           <Input id={`${prefix}-name`} name="name" className="h-10" defaultValue={item?.name} required />
@@ -295,7 +300,7 @@ function CatalogItemForm({
       <Button type="submit" className="w-full sm:w-auto">
         {submitLabel}
       </Button>
-    </form>
+    </FeedbackForm>
   );
 }
 
@@ -315,7 +320,11 @@ function IngredientConversionsForm({
         { id: "new-4", unit: "szklanka", gramsEquivalent: "", label: null, isDefault: false },
       ];
   return (
-    <form action={replaceIngredientUnitConversionsAction.bind(null, ingredientId)} className="space-y-2">
+    <FeedbackForm
+      action={replaceIngredientUnitConversionsAction.bind(null, ingredientId)}
+      successMessage="Zapisano konwersje jednostek"
+      className="space-y-2"
+    >
       <p className="text-sm font-medium">Konwersje jednostek</p>
       <p className="text-xs text-muted-foreground">np. 1 szt = 55 g — tylko dla tej pozycji</p>
       {rows.map((conversion, index) => (
@@ -351,7 +360,7 @@ function IngredientConversionsForm({
       <Button type="submit" variant="outline" size="sm">
         Zapisz konwersje
       </Button>
-    </form>
+    </FeedbackForm>
   );
 }
 
@@ -602,17 +611,18 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
             <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Kategorie i tagi</summary>
             <div className="space-y-4 border-t px-4 py-3 md:grid md:grid-cols-2 md:gap-6 md:space-y-0">
               <div className="space-y-2">
-                <form action={createCategoryAction} className="flex gap-2">
+                <FeedbackForm action={createCategoryAction} successMessage="Dodano kategorię" className="flex gap-2">
                   <Input name="name" placeholder="Nowa kategoria" required className="h-10" />
                   <Button type="submit" size="sm">
                     Dodaj
                   </Button>
-                </form>
+                </FeedbackForm>
                 {categories.map((cat) => (
                   <details key={cat.id}>
                     <summary className="cursor-pointer text-sm">{cat.name}</summary>
-                    <form
+                    <FeedbackForm
                       action={updateCategoryAction.bind(null, cat.id)}
+                      successMessage="Zapisano kategorię"
                       className="mt-2 flex flex-wrap gap-2"
                     >
                       <Input name="name" defaultValue={cat.name} required className="h-10 min-w-0 flex-1" />
@@ -634,25 +644,26 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
                       >
                         Usuń
                       </Button>
-                    </form>
+                    </FeedbackForm>
                   </details>
                 ))}
               </div>
               <div className="space-y-2">
-                <form action={createTagAction} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <FeedbackForm action={createTagAction} successMessage="Dodano tag" className="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <Input name="name" placeholder="Nowy tag" required className="h-10" />
                   <input type="hidden" name="type" value="ingredient" />
                   <Button type="submit" size="sm">
                     Dodaj
                   </Button>
-                </form>
+                </FeedbackForm>
                 {allTags
                   .filter((entry) => entry.type === "ingredient")
                   .map((tagEntry) => (
                     <details key={tagEntry.id}>
                       <summary className="cursor-pointer text-sm">{tagEntry.name}</summary>
-                      <form
+                      <FeedbackForm
                         action={updateTagAction.bind(null, tagEntry.id)}
+                        successMessage="Zapisano tag"
                         className="mt-2 flex flex-wrap gap-2"
                       >
                         <Input
@@ -673,7 +684,7 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
                         >
                           Usuń
                         </Button>
-                      </form>
+                      </FeedbackForm>
                     </details>
                   ))}
               </div>

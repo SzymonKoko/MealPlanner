@@ -2,6 +2,7 @@ import { pgTable, uuid, text, integer, timestamp, date, uniqueIndex, boolean } f
 import { households } from "./households";
 import { users } from "./users";
 import { recipes } from "./recipes";
+import { ingredients, products } from "./ingredients";
 
 export const mealTypeEnum = [
   "breakfast",
@@ -17,9 +18,9 @@ export const mealPlanEntries = pgTable("meal_plan_entries", {
   householdId: uuid("household_id")
     .notNull()
     .references(() => households.id, { onDelete: "cascade" }),
-  recipeId: uuid("recipe_id")
-    .notNull()
-    .references(() => recipes.id, { onDelete: "cascade" }),
+  recipeId: uuid("recipe_id").references(() => recipes.id, { onDelete: "cascade" }),
+  ingredientId: uuid("ingredient_id").references(() => ingredients.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").references(() => products.id, { onDelete: "cascade" }),
   date: date("date").notNull(),
   mealType: text("meal_type").notNull().$type<MealType>(),
   servings: integer("servings").notNull().default(1),
