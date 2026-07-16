@@ -38,10 +38,10 @@ Internet
 
 ## Domena
 
-Przykład:
+Docelowo:
 
 ```text
-food.rozwinswojbiznes.pl
+https://food.rozwinswojbiznes.pl -> http://192.168.1.213:3102
 ```
 
 ## Authentik
@@ -53,8 +53,8 @@ Należy skonfigurować:
 - client ID,
 - client secret,
 - issuer URL,
-- redirect URI,
-- logout redirect URI.
+- redirect URI: `https://food.rozwinswojbiznes.pl/api/auth/callback/authentik`,
+- logout redirect URI, jeśli używany: `https://food.rozwinswojbiznes.pl/login`.
 
 Sekrety przechowywać wyłącznie w zmiennych środowiskowych lub menedżerze sekretów.
 
@@ -65,6 +65,9 @@ Przykładowe nazwy:
 ```text
 DATABASE_URL
 AUTH_SECRET
+AUTH_URL
+NEXTAUTH_URL
+AUTH_TRUST_HOST
 AUTHENTIK_ISSUER
 AUTHENTIK_CLIENT_ID
 AUTHENTIK_CLIENT_SECRET
@@ -107,7 +110,7 @@ Backup bez przetestowanego odtwarzania nie jest wystarczający.
 
 Migracje powinny uruchamiać się kontrolowanie.
 
-Nie wykonywać nieodwracalnych migracji automatycznie bez kopii zapasowej.
+Compose uruchamia usługę `migrate` przed aplikacją. Migracje muszą być idempotentne albo kontrolowane przed wdrożeniem. Nie wykonywać nieodwracalnych migracji automatycznie bez kopii zapasowej.
 
 ## Logowanie
 

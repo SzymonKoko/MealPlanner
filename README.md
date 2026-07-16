@@ -32,20 +32,35 @@ cd MealPlanner
 cp .env.production.example .env
 nano .env   # ustaw AUTH_SECRET i AUTHENTIK_CLIENT_SECRET
 
-# deploy
-docker compose up -d --build
-
-# migracja (pierwszy raz)
-docker compose exec -T postgres psql -U mealplanner -d mealplanner < src/db/migrations/0001_initial.sql
+# deploy z migracjami i healthcheckiem
+sh scripts/deploy-production.sh
 ```
 
-Aplikacja: `http://localhost:3102` → Cloudflare Tunnel na `https://food.rozwinswojbiznes.pl`
+Aplikacja nasłuchuje na `http://192.168.1.213:3102`, a publiczny adres to `https://food.rozwinswojbiznes.pl`. Reverse proxy, DNS albo Cloudflare Tunnel powinny kierować `food.rozwinswojbiznes.pl` na `192.168.1.213:3102`.
+
+W Authentiku skonfiguruj aplikację OIDC z redirect URI:
+
+```text
+https://food.rozwinswojbiznes.pl/api/auth/callback/authentik
+```
+
+Issuer musi odpowiadać wartości w `.env`, domyślnie:
+
+```text
+https://auth.rozwinswojbiznes.pl/application/o/food-planner-app/
+```
 
 Przy kolejnych deployach `.env` zostaje na serwerze (jest w `.gitignore`):
 
 ```bash
 git pull
-docker compose up -d --build
+sh scripts/deploy-production.sh
+```
+
+Skrypt uruchamia Compose z `COMPOSE_DISABLE_ENV_FILE=1`, a aplikacja czyta `.env` jako `env_file` w trybie `raw`. To jest istotne, jeśli `AUTH_SECRET` albo `AUTHENTIK_CLIENT_SECRET` zawiera znak `$`. Przy ręcznym uruchamianiu użyj:
+
+```bash
+COMPOSE_DISABLE_ENV_FILE=1 docker compose up -d --build
 ```
 
 ## Szybki start (Docker)
@@ -72,6 +87,9 @@ AUTH_SECRET=your-secret-at-least-32-characters-long
 AUTHENTIK_ISSUER=https://auth.example.com/application/o/meal-planner/
 AUTHENTIK_CLIENT_ID=...
 AUTHENTIK_CLIENT_SECRET=...
+AUTH_URL=https://food.rozwinswojbiznes.pl
+NEXTAUTH_URL=https://food.rozwinswojbiznes.pl
+AUTH_TRUST_HOST=true
 DEV_AUTH_BYPASS=false
 ```
 
