@@ -44,7 +44,6 @@ export const mealPlanDetailsSchema = z.object({
   entryId: z.string().uuid(),
   servings: z.coerce.number().int().min(1),
   notes: z.string().max(500).optional(),
-  status: z.enum(["planned", "prepared", "eaten"]).default("planned"),
   isBatchCooking: z.coerce.boolean().default(false),
 });
 

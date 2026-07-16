@@ -46,7 +46,6 @@ interface PlanEntry {
   mealType: MealType;
   servings: number;
   notes: string | null;
-  status: string;
   isBatchCooking: boolean;
 }
 
@@ -66,6 +65,16 @@ interface PaletteItem {
   id: string;
   name: string;
   kind: SourceType;
+  kcal: number | null;
+  kcalLabel: string | null;
+}
+
+interface DayTotals {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
 }
 
 interface MealPlanViewProps {
@@ -74,6 +83,7 @@ interface MealPlanViewProps {
   view: PlanViewMode;
   entries: PlanEntry[];
   assignments: Assignment[];
+  dayTotals: Record<string, DayTotals>;
   recipes: PaletteItem[];
   ingredients: PaletteItem[];
   members: Member[];
@@ -117,6 +127,7 @@ export function MealPlanView({
   view,
   entries: initialEntries,
   assignments: initialAssignments,
+  dayTotals,
   recipes,
   ingredients,
   members,
@@ -126,6 +137,8 @@ export function MealPlanView({
   const [assignments, setAssignments] = useState(initialAssignments);
   const [error, setError] = useState<string | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
+  const [kcalSort, setKcalSort] = useState<"name" | "kcal-asc" | "kcal-desc">("name");
+  const [maxKcal, setMaxKcal] = useState("");
   const [activeDragLabel, setActiveDragLabel] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -139,17 +152,35 @@ export function MealPlanView({
     format(addDays(parseISO(weekStart), i), "yyyy-MM-dd"),
   );
 
-  const filteredRecipes = useMemo(() => {
+  function filterAndSortPalette(items: PaletteItem[]) {
     const q = paletteQuery.trim().toLowerCase();
-    if (!q) return recipes;
-    return recipes.filter((item) => item.name.toLowerCase().includes(q));
-  }, [paletteQuery, recipes]);
+    const max = maxKcal.trim() ? Number.parseFloat(maxKcal) : null;
+    let list = items.filter((item) => {
+      if (q && !item.name.toLowerCase().includes(q)) return false;
+      if (max != null && Number.isFinite(max) && (item.kcal == null || item.kcal > max)) return false;
+      return true;
+    });
+    if (kcalSort === "kcal-asc") {
+      list = [...list].sort((a, b) => (a.kcal ?? Number.POSITIVE_INFINITY) - (b.kcal ?? Number.POSITIVE_INFINITY));
+    } else if (kcalSort === "kcal-desc") {
+      list = [...list].sort((a, b) => (b.kcal ?? -1) - (a.kcal ?? -1));
+    } else {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name, "pl"));
+    }
+    return list;
+  }
 
-  const filteredIngredients = useMemo(() => {
-    const q = paletteQuery.trim().toLowerCase();
-    if (!q) return ingredients;
-    return ingredients.filter((item) => item.name.toLowerCase().includes(q));
-  }, [ingredients, paletteQuery]);
+  const filteredRecipes = useMemo(
+    () => filterAndSortPalette(recipes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [paletteQuery, recipes, kcalSort, maxKcal],
+  );
+
+  const filteredIngredients = useMemo(
+    () => filterAndSortPalette(ingredients),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ingredients, paletteQuery, kcalSort, maxKcal],
+  );
 
   const dayEntries = entries.filter((e) => e.date === selectedDay);
 
@@ -314,6 +345,7 @@ export function MealPlanView({
           <WeekGrid
             weekDays={weekDays}
             entries={entries}
+            dayTotals={dayTotals}
             editable={editable}
             isDragging={isDragging}
             onOpenDay={(day) => go(planHref({ week: weekStart, view: "day", day }))}
@@ -321,6 +353,7 @@ export function MealPlanView({
         ) : (
           <DayDetail
             selectedDay={selectedDay}
+            dayTotal={dayTotals[selectedDay]}
             entries={dayEntries}
             assignments={assignments}
             members={members}
@@ -333,6 +366,10 @@ export function MealPlanView({
           <PlanPalette
             query={paletteQuery}
             onQueryChange={setPaletteQuery}
+            kcalSort={kcalSort}
+            onKcalSortChange={setKcalSort}
+            maxKcal={maxKcal}
+            onMaxKcalChange={setMaxKcal}
             recipes={filteredRecipes}
             ingredients={filteredIngredients}
           />
@@ -444,15 +481,28 @@ function WeekNavigation({
   );
 }
 
+function DayMacros({ totals }: { totals?: DayTotals }) {
+  if (!totals) return null;
+  return (
+    <p className="text-[11px] leading-tight text-muted-foreground tabular-nums">
+      {Math.round(totals.kcal)} kcal
+      <br />
+      B {Math.round(totals.protein)} · W {Math.round(totals.carbs)} · T {Math.round(totals.fat)}
+    </p>
+  );
+}
+
 function WeekGrid({
   weekDays,
   entries,
+  dayTotals,
   editable,
   isDragging,
   onOpenDay,
 }: {
   weekDays: string[];
   entries: PlanEntry[];
+  dayTotals: Record<string, DayTotals>;
   editable: boolean;
   isDragging: boolean;
   onOpenDay: (day: string) => void;
@@ -465,10 +515,13 @@ function WeekGrid({
           <button
             key={day}
             type="button"
-            className="rounded-md px-1 py-1 text-center text-xs font-medium hover:bg-accent"
+            className="space-y-1 rounded-md px-1 py-1 text-center hover:bg-accent"
             onClick={() => onOpenDay(day)}
           >
-            {format(parseISO(day), "EEE d", { locale: pl })}
+            <span className="block text-xs font-medium">
+              {format(parseISO(day), "EEE d", { locale: pl })}
+            </span>
+            <DayMacros totals={dayTotals[day]} />
           </button>
         ))}
         {mealTypeEnum.map((mealType) => (
@@ -499,6 +552,7 @@ function WeekGrid({
 
 function DayDetail({
   selectedDay,
+  dayTotal,
   entries,
   assignments,
   members,
@@ -506,6 +560,7 @@ function DayDetail({
   isDragging,
 }: {
   selectedDay: string;
+  dayTotal?: DayTotals;
   entries: PlanEntry[];
   assignments: Assignment[];
   members: Member[];
@@ -514,6 +569,17 @@ function DayDetail({
 }) {
   return (
     <div className="space-y-3">
+      {dayTotal ? (
+        <Card>
+          <CardContent className="flex flex-wrap gap-x-4 gap-y-1 p-3 text-sm">
+            <span className="font-medium">{Math.round(dayTotal.kcal)} kcal</span>
+            <span className="text-muted-foreground">Białko {Math.round(dayTotal.protein)} g</span>
+            <span className="text-muted-foreground">Węgle {Math.round(dayTotal.carbs)} g</span>
+            <span className="text-muted-foreground">Tłuszcz {Math.round(dayTotal.fat)} g</span>
+            <span className="text-muted-foreground">Błonnik {Math.round(dayTotal.fiber)} g</span>
+          </CardContent>
+        </Card>
+      ) : null}
       {mealTypeEnum.map((mealType) => {
         const typeEntries = entries.filter((e) => e.mealType === mealType);
         return (
@@ -600,6 +666,7 @@ function DetailedEntryCard({
   members: Member[];
   editable: boolean;
 }) {
+  const [editing, setEditing] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `entry:${entry.id}`,
     disabled: !editable,
@@ -608,9 +675,6 @@ function DetailedEntryCard({
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.5 : 1,
   };
-
-  const statusLabel =
-    entry.status === "prepared" ? "Przygotowane" : entry.status === "eaten" ? "Zjedzone" : "Zaplanowane";
 
   return (
     <div ref={setNodeRef} style={style} className="rounded-lg border bg-accent/20 p-3">
@@ -627,22 +691,28 @@ function DetailedEntryCard({
         >
           {entry.itemName}
         </button>
-        {editable ? (
-          <FeedbackForm
-            action={deleteMealPlanEntryAction.bind(null, entry.id)}
-            successMessage="Usunięto posiłek z planu"
-          >
-            <Button type="submit" variant="ghost" size="sm" className="text-destructive">
-              Usuń
+        <div className="flex shrink-0 gap-1">
+          {editable ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing((value) => !value)}>
+              {editing ? "Zwiń" : "Edytuj"}
             </Button>
-          </FeedbackForm>
-        ) : null}
+          ) : null}
+          {editable ? (
+            <FeedbackForm
+              action={deleteMealPlanEntryAction.bind(null, entry.id)}
+              successMessage="Usunięto posiłek z planu"
+            >
+              <Button type="submit" variant="ghost" size="sm" className="text-destructive">
+                Usuń
+              </Button>
+            </FeedbackForm>
+          ) : null}
+        </div>
       </div>
 
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
         <span>{entry.sourceType === "recipe" ? "Przepis" : "Składnik"}</span>
         <span>{entry.servings} porcji</span>
-        <span>{statusLabel}</span>
         {entry.isBatchCooking ? <span>Gotowanie na kilka dni</span> : null}
       </div>
 
@@ -659,7 +729,7 @@ function DetailedEntryCard({
         </div>
       ) : null}
 
-      {editable ? (
+      {editable && editing ? (
         <div className="mt-3 space-y-3 border-t pt-3">
           <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Przypisz porcje</p>
@@ -702,33 +772,20 @@ function DetailedEntryCard({
             action={updateMealPlanDetailsAction}
             successMessage="Zapisano szczegóły posiłku"
             errorMessage="Nie udało się zapisać szczegółów"
+            onSuccess={() => setEditing(false)}
             className="space-y-2"
           >
             <input type="hidden" name="entryId" value={entry.id} />
-            <div className="grid gap-2 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="text-muted-foreground">Porcje</span>
-                <input
-                  className="h-11 w-full rounded-lg border bg-background px-2"
-                  type="number"
-                  min="1"
-                  name="servings"
-                  defaultValue={entry.servings}
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <select
-                  className="h-11 w-full rounded-lg border bg-background px-2"
-                  name="status"
-                  defaultValue={entry.status}
-                >
-                  <option value="planned">Zaplanowane</option>
-                  <option value="prepared">Przygotowane</option>
-                  <option value="eaten">Zjedzone</option>
-                </select>
-              </label>
-            </div>
+            <label className="block space-y-1 text-sm">
+              <span className="text-muted-foreground">Porcje</span>
+              <input
+                className="h-11 w-full rounded-lg border bg-background px-2"
+                type="number"
+                min="1"
+                name="servings"
+                defaultValue={entry.servings}
+              />
+            </label>
             <textarea
               className="min-h-20 w-full rounded-lg border bg-background p-2 text-sm"
               name="notes"
@@ -752,28 +809,55 @@ function DetailedEntryCard({
 function PlanPalette({
   query,
   onQueryChange,
+  kcalSort,
+  onKcalSortChange,
+  maxKcal,
+  onMaxKcalChange,
   recipes,
   ingredients,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
+  kcalSort: "name" | "kcal-asc" | "kcal-desc";
+  onKcalSortChange: (value: "name" | "kcal-asc" | "kcal-desc") => void;
+  maxKcal: string;
+  onMaxKcalChange: (value: string) => void;
   recipes: PaletteItem[];
   ingredients: PaletteItem[];
 }) {
   return (
     <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2">
         <div>
           <h2 className="font-semibold">Przepisy i składniki</h2>
           <p className="text-sm text-muted-foreground">Przeciągnij na slot w planerze.</p>
         </div>
-        <Input
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Szukaj…"
-          className="sm:max-w-xs"
-          aria-label="Szukaj w palecie"
-        />
+        <div className="grid gap-2 sm:grid-cols-[1fr_10rem_8rem]">
+          <Input
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Szukaj…"
+            aria-label="Szukaj w palecie"
+          />
+          <select
+            value={kcalSort}
+            onChange={(event) => onKcalSortChange(event.target.value as "name" | "kcal-asc" | "kcal-desc")}
+            className="h-11 rounded-lg border bg-background px-2 text-sm"
+            aria-label="Sortowanie"
+          >
+            <option value="name">Sortuj: nazwa</option>
+            <option value="kcal-asc">Sortuj: kcal ↑</option>
+            <option value="kcal-desc">Sortuj: kcal ↓</option>
+          </select>
+          <Input
+            value={maxKcal}
+            onChange={(event) => onMaxKcalChange(event.target.value)}
+            type="number"
+            min="0"
+            placeholder="Max kcal"
+            aria-label="Filtr max kcal"
+          />
+        </div>
       </div>
       <div className="space-y-4">
         <div>
@@ -822,6 +906,7 @@ function PaletteChip({ item }: { item: PaletteItem }) {
       <span className="font-medium">{item.name}</span>
       <span className="mt-0.5 block text-[11px] text-muted-foreground">
         {item.kind === "recipe" ? "Przepis" : "Składnik"}
+        {item.kcalLabel ? ` · ${item.kcalLabel} kcal` : ""}
       </span>
     </button>
   );

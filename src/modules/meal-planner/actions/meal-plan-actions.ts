@@ -123,7 +123,6 @@ export async function updateMealPlanDetailsAction(formData: FormData) {
     entryId: formData.get("entryId"),
     servings: formData.get("servings"),
     notes: formData.get("notes") || undefined,
-    status: formData.get("status") || "planned",
     isBatchCooking: formData.get("isBatchCooking") === "true",
   });
   if (!parsed.success) {
@@ -151,7 +150,6 @@ export async function updateMealPlanDetailsAction(formData: FormData) {
   const entry = await updateMealPlanEntry(householdId, parsed.data.entryId, {
     servings: parsed.data.servings,
     notes: parsed.data.notes,
-    status: parsed.data.status,
     isBatchCooking: parsed.data.isBatchCooking,
   });
   if (!entry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
