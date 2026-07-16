@@ -58,7 +58,7 @@ function NutritionFields({
   const fields = [
     ["kcalPer100", "kcal"],
     ["proteinPer100", "Białko"],
-    ["carbsPer100", "Węglowodany"],
+    ["carbsPer100", "Węgle"],
     ["fatPer100", "Tłuszcze"],
     ["fiberPer100", "Błonnik"],
     ["saltPer100", "Sól"],
@@ -66,7 +66,7 @@ function NutritionFields({
   const basisLabel = values?.nutritionBasis === "per100ml" ? "100 ml" : "100 g";
   return (
     <fieldset className="space-y-3 rounded-lg border p-3">
-      <legend className="px-1 text-sm font-medium">Wartości odżywcze</legend>
+      <legend className="px-1 text-sm font-medium">Wartości odżywcze (na {basisLabel})</legend>
       <div className="space-y-2">
         <Label htmlFor={`${prefix}-nutritionBasis`}>Podstawa danych</Label>
         <select
@@ -81,8 +81,10 @@ function NutritionFields({
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {fields.map(([name, label]) => (
-          <div className="space-y-2" key={name}>
-            <Label htmlFor={`${prefix}-${name}`}>{label} / {basisLabel}</Label>
+          <div className="flex min-w-0 flex-col gap-2" key={name}>
+            <Label htmlFor={`${prefix}-${name}`} className="min-h-10 leading-tight">
+              {label}
+            </Label>
             <Input
               id={`${prefix}-${name}`}
               name={name}
@@ -229,11 +231,11 @@ function IngredientConversionsForm({
         Dodaj tylko przeliczniki specyficzne dla tego składnika, np. `1 szt = 55 g`.
       </p>
       {rows.map((conversion, index) => (
-        <div key={`${conversion.unit}-${index}`} className="grid gap-2 sm:grid-cols-[10rem_1fr_1fr]">
+        <div key={`${conversion.unit}-${index}`} className="grid grid-cols-1 gap-2 sm:grid-cols-[8rem_1fr_1fr]">
           <select
             name="conversionUnit"
             defaultValue={conversion.unit}
-            className="flex h-11 rounded-lg border border-input bg-background px-3 text-sm"
+            className="flex h-11 min-w-0 rounded-lg border border-input bg-background px-3 text-sm"
           >
             <option value="szt">szt</option>
             <option value="lyzka">łyżka</option>
@@ -420,12 +422,12 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
           </div>
         ) : null}
 
-        <form className="grid gap-2 sm:grid-cols-[1fr_13rem_13rem_auto]" method="get">
-          <Input name="q" defaultValue={search} placeholder="Nazwa, marka lub kod kreskowy" />
+        <form className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_12rem_12rem_auto]" method="get">
+          <Input name="q" defaultValue={search} placeholder="Nazwa, marka lub kod kreskowy" className="sm:col-span-2 xl:col-span-1" />
           <select
             name="category"
             defaultValue={category}
-            className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+            className="flex h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm"
           >
             <option value="">Wszystkie kategorie</option>
             {categories.map((item) => (
@@ -435,14 +437,14 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
           <select
             name="tag"
             defaultValue={tag}
-            className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+            className="flex h-11 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm"
           >
             <option value="">Wszystkie tagi</option>
             {tags.map((item) => (
               <option key={item.id} value={item.id}>{item.name}</option>
             ))}
           </select>
-          <Button type="submit" variant="secondary">Szukaj</Button>
+          <Button type="submit" variant="secondary" className="w-full xl:w-auto">Szukaj</Button>
         </form>
 
         {!editable ? (
@@ -451,7 +453,7 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
           </p>
         ) : (
           <>
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <Card>
                 <CardHeader>
                   <CardTitle>Dodaj składnik</CardTitle>
@@ -491,9 +493,9 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
                   {categories.map((category) => (
                     <details key={category.id}>
                       <summary className="cursor-pointer">{category.name}</summary>
-                      <form action={updateCategoryAction.bind(null, category.id)} className="mt-2 flex gap-2">
-                        <Input name="name" defaultValue={category.name} required />
-                        <Input name="sortOrder" type="number" defaultValue={category.sortOrder} className="w-24" aria-label="Kolejność" />
+                      <form action={updateCategoryAction.bind(null, category.id)} className="mt-2 flex flex-wrap gap-2">
+                        <Input name="name" defaultValue={category.name} required className="min-w-0 flex-1" />
+                        <Input name="sortOrder" type="number" defaultValue={category.sortOrder} className="w-20 shrink-0" aria-label="Kolejność" />
                         <Button type="submit" size="sm">Zapisz</Button>
                         <Button formAction={deleteCategoryAction.bind(null, category.id)} type="submit" variant="ghost" size="sm">Usuń</Button>
                       </form>
@@ -517,8 +519,8 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
                   {allTags.map((tag) => (
                     <details key={tag.id}>
                       <summary className="cursor-pointer">{tag.name} <span className="text-xs text-muted-foreground">({tag.type})</span></summary>
-                      <form action={updateTagAction.bind(null, tag.id)} className="mt-2 flex gap-2">
-                        <Input name="name" defaultValue={tag.name} required />
+                      <form action={updateTagAction.bind(null, tag.id)} className="mt-2 flex flex-wrap gap-2">
+                        <Input name="name" defaultValue={tag.name} required className="min-w-0 flex-1" />
                         <input type="hidden" name="type" value={tag.type} />
                         <Button type="submit" size="sm">Zapisz</Button>
                         <Button formAction={deleteTagAction.bind(null, tag.id)} type="submit" variant="ghost" size="sm">Usuń</Button>

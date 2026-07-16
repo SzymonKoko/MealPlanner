@@ -256,19 +256,22 @@ export function UsdaIngredientImportFlow({
                   <option value="ml">ml</option>
                 </select>
               </div>
+              <p className="text-sm font-medium text-muted-foreground">Wartości na 100 g</p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {(
                   [
                     ["kcalPer100", "kcal", selected.kcalPer100],
                     ["proteinPer100", "Białko", selected.proteinPer100],
-                    ["carbsPer100", "Węglowodany", selected.carbsPer100],
+                    ["carbsPer100", "Węgle", selected.carbsPer100],
                     ["fatPer100", "Tłuszcze", selected.fatPer100],
                     ["fiberPer100", "Błonnik", selected.fiberPer100],
                     ["saltPer100", "Sól", selected.saltPer100],
                   ] as Array<[string, string, string | null]>
                 ).map(([name, label, value]) => (
-                  <div className="space-y-2" key={name}>
-                    <Label htmlFor={name}>{label} / 100 g</Label>
+                  <div className="flex min-w-0 flex-col gap-2" key={name}>
+                    <Label htmlFor={name} className="min-h-10 leading-tight">
+                      {label}
+                    </Label>
                     <Input id={name} name={name} defaultValue={value ?? ""} inputMode="decimal" />
                   </div>
                 ))}
@@ -286,11 +289,11 @@ export function UsdaIngredientImportFlow({
                   Dodaj tylko wiarygodne przeliczniki dla tego konkretnego składnika, np. `1 szt = 55 g`.
                 </p>
                 {EMPTY_CONVERSION_ROWS.map((conversion, index) => (
-                  <div key={`${conversion.unit}-${index}`} className="grid gap-2 sm:grid-cols-[10rem_1fr_1fr]">
+                  <div key={`${conversion.unit}-${index}`} className="grid grid-cols-1 gap-2 sm:grid-cols-[8rem_1fr_1fr]">
                     <select
                       name="conversionUnit"
                       defaultValue={conversion.unit}
-                      className="flex h-11 rounded-lg border border-input bg-background px-3 text-sm"
+                      className="flex h-11 min-w-0 rounded-lg border border-input bg-background px-3 text-sm"
                     >
                       <option value="szt">szt</option>
                       <option value="lyzka">łyżka</option>

@@ -27,8 +27,8 @@ export function HouseholdSwitcher({ households, activeHouseholdId }: HouseholdSw
         router.refresh();
       }}
     >
-      <SelectTrigger className="w-48">
-        <SelectValue placeholder="Wybierz gospodarstwo" />
+      <SelectTrigger className="w-28 max-w-[40vw] sm:w-44">
+        <SelectValue placeholder="Gospodarstwo" />
       </SelectTrigger>
       <SelectContent>
         {households.map((h) => (
