@@ -91,13 +91,18 @@ export default async function TodayPage() {
           </Card>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <NutritionRing label="Kalorie" consumed={progress.kcal.consumed} target={progress.kcal.target} unit="kcal" color="#3d7a4a" />
-          <NutritionRing label="Białko" consumed={progress.protein.consumed} target={progress.protein.target} unit="g" color="#c45c26" />
-          <NutritionRing label="Węglowodany" consumed={progress.carbs.consumed} target={progress.carbs.target} unit="g" color="#c9a227" />
-          <NutritionRing label="Tłuszcze" consumed={progress.fat.consumed} target={progress.fat.target} unit="g" color="#2a6f8f" />
-          <NutritionRing label="Błonnik" consumed={progress.fiber.consumed} target={progress.fiber.target} unit="g" color="#6b8f4e" />
-          <NutritionRing label="Sól" consumed={nutrition.consumed.salt} target={0} unit="g" decimals={2} color="#8a6a4a" />
+        <div>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Progress względem celów na podstawie zaplanowanych posiłków na dziś.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <NutritionRing label="Kalorie" consumed={progress.kcal.consumed} target={progress.kcal.target} unit="kcal" color="#3d7a4a" />
+            <NutritionRing label="Białko" consumed={progress.protein.consumed} target={progress.protein.target} unit="g" color="#c45c26" />
+            <NutritionRing label="Węglowodany" consumed={progress.carbs.consumed} target={progress.carbs.target} unit="g" color="#c9a227" />
+            <NutritionRing label="Tłuszcze" consumed={progress.fat.consumed} target={progress.fat.target} unit="g" color="#2a6f8f" />
+            <NutritionRing label="Błonnik" consumed={progress.fiber.consumed} target={progress.fiber.target} unit="g" color="#6b8f4e" />
+            <NutritionRing label="Sól" consumed={nutrition.planned.salt} target={0} unit="g" decimals={2} color="#8a6a4a" />
+          </div>
         </div>
 
         <Card>
@@ -106,16 +111,19 @@ export default async function TodayPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {nutrition.meals.length === 0 ? (
-              <p className="text-muted-foreground">Nie masz przypisanych porcji na dziś.</p>
+              <p className="text-muted-foreground">Brak posiłków w planie na dziś.</p>
             ) : (
               nutrition.meals.map((meal) => (
-                <div key={meal.entryId} className="flex items-center justify-between rounded-lg border p-3">
+                <div key={meal.entryId} className="flex items-center justify-between gap-3 rounded-lg border p-3">
                   <div>
-                    <p className="font-medium">{meal.recipeName}</p>
+                    <p className="font-medium">{meal.itemName}</p>
                     <p className="text-sm text-muted-foreground">
-                      {MEAL_TYPE_LABELS[meal.mealType as keyof typeof MEAL_TYPE_LABELS]} · Twoje porcje: {meal.servings}
+                      {MEAL_TYPE_LABELS[meal.mealType as keyof typeof MEAL_TYPE_LABELS]} · {meal.servings} porcji
                     </p>
                   </div>
+                  <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                    {Math.round(meal.nutrition.kcal)} kcal
+                  </p>
                 </div>
               ))
             )}
