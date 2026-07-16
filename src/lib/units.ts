@@ -1,5 +1,20 @@
 export const SUPPORTED_UNITS = ["g", "kg", "ml", "l", "szt"] as const;
 export type SupportedUnit = (typeof SUPPORTED_UNITS)[number];
+export const RECIPE_SUPPORTED_UNITS = [
+  ...SUPPORTED_UNITS,
+  "lyzka",
+  "lyzeczka",
+  "szklanka",
+  "opakowanie",
+] as const;
+export type RecipeSupportedUnit = (typeof RECIPE_SUPPORTED_UNITS)[number];
+
+export interface IngredientUnitConversion {
+  unit: string;
+  gramsEquivalent: string | number;
+  label?: string | null;
+  isDefault?: boolean;
+}
 
 const TO_GRAMS: Record<SupportedUnit, number | null> = {
   g: 1,
@@ -58,4 +73,21 @@ export function addQuantities(
   if (converted === null) return null;
 
   return { quantity: a.quantity + converted, unit: a.unit };
+}
+
+export function convertWithIngredientConversions(
+  quantity: number,
+  unit: string,
+  baseUnit: string,
+  densityGramsPerMl?: number | null,
+  conversions?: IngredientUnitConversion[],
+): number | null {
+  const direct = convertToBaseUnit(quantity, unit, baseUnit, densityGramsPerMl);
+  if (direct !== null) return direct;
+
+  const conversion = conversions?.find((item) => item.unit === unit);
+  if (!conversion) return null;
+
+  const grams = quantity * Number(conversion.gramsEquivalent);
+  return convertToBaseUnit(grams, "g", baseUnit, densityGramsPerMl);
 }

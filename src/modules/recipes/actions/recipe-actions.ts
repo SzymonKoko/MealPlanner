@@ -14,7 +14,10 @@ import {
   getRecipeWithIngredients,
   listRecipes,
 } from "../repository/recipe-repository";
-import { getIngredient } from "@/modules/ingredients/repository/ingredient-repository";
+import {
+  getIngredient,
+  getIngredientUnitConversions,
+} from "@/modules/ingredients/repository/ingredient-repository";
 import { db } from "@/db/client";
 import { products, tags } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -29,8 +32,12 @@ async function resolveNutritionSource(
   if (ingredientId) {
     const ingredient = await getIngredient(householdId, ingredientId);
     if (!ingredient) throw new AppError("Składnik nie istnieje", "NOT_FOUND", 404);
+    const conversions = await getIngredientUnitConversions([ingredient.id]);
     return {
-      nutrition: ingredient,
+      nutrition: {
+        ...ingredient,
+        unitConversions: conversions,
+      },
     };
   }
 
@@ -46,10 +53,16 @@ async function resolveNutritionSource(
     const linkedIngredient = product.ingredientId
       ? await getIngredient(householdId, product.ingredientId)
       : null;
+    const linkedConversions = linkedIngredient
+      ? await getIngredientUnitConversions([linkedIngredient.id])
+      : [];
     return {
       nutrition: {
         ...product,
         densityGramsPerMl: linkedIngredient?.densityGramsPerMl ?? null,
+        unitConversions: linkedConversions,
+        packageQuantity: product.packageQuantity,
+        packageUnit: product.packageUnit,
       },
     };
   }

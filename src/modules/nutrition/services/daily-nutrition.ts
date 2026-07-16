@@ -11,6 +11,7 @@ import {
 import { getMealPlanForDate } from "@/modules/meal-planner/repository/meal-plan-repository";
 import { getRecipeWithIngredients } from "@/modules/recipes/repository/recipe-repository";
 import { getAssignmentsForEntry } from "@/modules/meal-planner/repository/meal-plan-repository";
+import { getIngredientUnitConversions } from "@/modules/ingredients/repository/ingredient-repository";
 import { db } from "@/db/client";
 import { ingredients, products } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
@@ -59,7 +60,10 @@ export async function calculateDailyNutritionForUser(
             )
             .limit(1);
           if (ingredient) {
-            nutritionSource = ingredient;
+            nutritionSource = {
+              ...ingredient,
+              unitConversions: await getIngredientUnitConversions([ingredient.id]),
+            };
           }
         } else if (ri.productId) {
           const [product] = await db
@@ -75,7 +79,7 @@ export async function calculateDailyNutritionForUser(
           if (product) {
             const [linkedIngredient] = product.ingredientId
               ? await db
-                  .select({ densityGramsPerMl: ingredients.densityGramsPerMl })
+                  .select({ id: ingredients.id, densityGramsPerMl: ingredients.densityGramsPerMl })
                   .from(ingredients)
                   .where(
                     and(
@@ -89,6 +93,11 @@ export async function calculateDailyNutritionForUser(
             nutritionSource = {
               ...product,
               densityGramsPerMl: linkedIngredient?.densityGramsPerMl ?? null,
+              unitConversions: linkedIngredient
+                ? await getIngredientUnitConversions([linkedIngredient.id])
+                : [],
+              packageQuantity: product.packageQuantity,
+              packageUnit: product.packageUnit,
             };
           }
         }

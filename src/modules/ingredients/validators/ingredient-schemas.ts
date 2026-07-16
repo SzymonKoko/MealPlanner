@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SUPPORTED_UNITS } from "@/lib/units";
+import { RECIPE_SUPPORTED_UNITS, SUPPORTED_UNITS } from "@/lib/units";
 import {
   nutritionBasisEnum,
   nutritionDataSourceEnum,
@@ -37,15 +37,16 @@ function hasValidGtinCheckDigit(value: string) {
   return checkDigit === (10 - (sum % 10)) % 10;
 }
 
-export const barcodeSchema = z
+export const barcodeValueSchema = z
   .string()
   .trim()
   .transform((value) => value.replace(/[\s-]/g, ""))
   .refine((value) => [8, 12, 13, 14].includes(value.length) && /^\d+$/.test(value), {
     message: "Kod kreskowy musi być numerem GTIN-8, UPC-12, EAN-13 lub GTIN-14",
   })
-  .refine(hasValidGtinCheckDigit, { message: "Kod kreskowy ma nieprawidłową cyfrę kontrolną" })
-  .optional();
+  .refine(hasValidGtinCheckDigit, { message: "Kod kreskowy ma nieprawidłową cyfrę kontrolną" });
+
+export const barcodeSchema = barcodeValueSchema.optional();
 
 const ingredientFields = z.object({
   name: z.string().min(1).max(200),
@@ -89,6 +90,15 @@ export const nutritionSourceSchema = z.object({
   sourceUpdatedAt: z.coerce.date().optional().nullable(),
   verifiedByUser: z.boolean(),
   manuallyModified: z.boolean(),
+});
+
+export const ingredientUnitConversionSchema = z.object({
+  unit: z.enum(RECIPE_SUPPORTED_UNITS).refine((value) => value !== "g" && value !== "kg" && value !== "ml" && value !== "l", {
+    message: "Dodatkowa konwersja powinna dotyczyć jednostki domowej",
+  }),
+  gramsEquivalent: optionalPositiveNumber,
+  label: z.string().max(100).optional(),
+  isDefault: z.boolean().default(false),
 });
 
 export const categorySchema = z.object({

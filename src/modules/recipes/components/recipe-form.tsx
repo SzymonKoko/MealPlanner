@@ -11,7 +11,8 @@ import {
   createRecipeAction,
   updateRecipeAction,
 } from "@/modules/recipes/actions/recipe-actions";
-import { SUPPORTED_UNITS } from "@/lib/units";
+import { RECIPE_SUPPORTED_UNITS } from "@/lib/units";
+import type { IngredientUnitConversion } from "@/lib/units";
 import {
   calculateNutritionForQuantity,
   EMPTY_NUTRITION,
@@ -32,6 +33,9 @@ interface RecipeSourceOption {
   fiberPer100: string | null;
   saltPer100: string | null;
   densityGramsPerMl?: string | null;
+  unitConversions?: IngredientUnitConversion[];
+  packageQuantity?: string | null;
+  packageUnit?: string | null;
 }
 
 interface RecipeFormProps {
@@ -282,9 +286,17 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
                   setRows(next);
                 }}
               >
-                {SUPPORTED_UNITS.map((u) => (
+                {RECIPE_SUPPORTED_UNITS.map((u) => (
                   <option key={u} value={u}>
-                    {u}
+                    {u === "lyzka"
+                      ? "łyżka"
+                      : u === "lyzeczka"
+                        ? "łyżeczka"
+                        : u === "szklanka"
+                          ? "szklanka"
+                          : u === "opakowanie"
+                            ? "opakowanie"
+                            : u}
                   </option>
                 ))}
               </select>
