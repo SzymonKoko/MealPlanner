@@ -15,8 +15,7 @@ cp .env.example .env
 # Ustaw AUTH_SECRET i DEV_AUTH_BYPASS=true dla lokalnego developmentu
 
 npm install
-docker compose up postgres -d
-npm run db:push   # lub uruchom src/db/migrations/0001_initial.sql ręcznie
+npm run setup:local
 npm run dev
 ```
 
@@ -114,11 +113,12 @@ npm run lint
 ## Migracje
 
 ```bash
-npm run db:generate
 npm run db:migrate
 ```
 
-Pierwsza migracja: `src/db/migrations/0001_initial.sql`
+Migracje SQL znajdują się w `src/db/migrations/` i są wykonywane kolejno przez
+kontener `migrate`. Rejestr zawiera checksumy; nie wolno zmieniać wykonanej
+migracji — każda zmiana schematu wymaga nowego pliku SQL.
 
 ## Dokumentacja projektu
 

@@ -5,10 +5,11 @@ import {
   categories,
   tags,
   ingredientTags,
+  productTags,
 } from "@/db/schema";
 import { and, eq, ilike, isNull, inArray } from "drizzle-orm";
 
-export async function listIngredients(householdId: string, search?: string) {
+export async function listIngredients(householdId: string, search?: string, categoryId?: string) {
   const conditions = [
     eq(ingredients.householdId, householdId),
     isNull(ingredients.deletedAt),
@@ -16,6 +17,9 @@ export async function listIngredients(householdId: string, search?: string) {
 
   if (search) {
     conditions.push(ilike(ingredients.name, `%${search}%`));
+  }
+  if (categoryId) {
+    conditions.push(eq(ingredients.categoryId, categoryId));
   }
 
   return db
@@ -78,6 +82,8 @@ export async function updateIngredient(
       .where(and(eq(ingredients.id, id), eq(ingredients.householdId, householdId)))
       .returning();
 
+    if (!ingredient) return null;
+
     if (tagIds) {
       await tx.delete(ingredientTags).where(eq(ingredientTags.ingredientId, id));
       if (tagIds.length) {
@@ -90,10 +96,12 @@ export async function updateIngredient(
 }
 
 export async function softDeleteIngredient(householdId: string, id: string) {
-  await db
+  const [ingredient] = await db
     .update(ingredients)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(ingredients.id, id), eq(ingredients.householdId, householdId)));
+    .where(and(eq(ingredients.id, id), eq(ingredients.householdId, householdId)))
+    .returning();
+  return ingredient ?? null;
 }
 
 export async function listProducts(householdId: string, search?: string) {
@@ -112,9 +120,45 @@ type ProductInput = Omit<
   "id" | "householdId" | "createdAt" | "updatedAt"
 >;
 
-export async function createProduct(householdId: string, data: ProductInput) {
-  const [product] = await db.insert(products).values({ ...data, householdId }).returning();
-  return product;
+export async function createProduct(householdId: string, data: ProductInput, tagIds?: string[]) {
+  return db.transaction(async (tx) => {
+    const [product] = await tx.insert(products).values({ ...data, householdId }).returning();
+    if (tagIds?.length) {
+      await tx.insert(productTags).values(tagIds.map((tagId) => ({ productId: product.id, tagId })));
+    }
+    return product;
+  });
+}
+
+export async function updateProduct(
+  householdId: string,
+  id: string,
+  data: Partial<ProductInput>,
+  tagIds?: string[],
+) {
+  return db.transaction(async (tx) => {
+    const [product] = await tx
+      .update(products)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(products.id, id), eq(products.householdId, householdId)))
+      .returning();
+    if (!product) return null;
+    if (tagIds) {
+      await tx.delete(productTags).where(eq(productTags.productId, id));
+      if (tagIds.length) {
+        await tx.insert(productTags).values(tagIds.map((tagId) => ({ productId: id, tagId })));
+      }
+    }
+    return product;
+  });
+}
+
+export async function deleteProduct(householdId: string, id: string) {
+  const [product] = await db
+    .delete(products)
+    .where(and(eq(products.id, id), eq(products.householdId, householdId)))
+    .returning();
+  return product ?? null;
 }
 
 export async function listCategories(householdId: string) {
@@ -133,13 +177,70 @@ export async function createCategory(householdId: string, name: string, sortOrde
   return category;
 }
 
+export async function deleteCategory(householdId: string, id: string) {
+  const [category] = await db
+    .delete(categories)
+    .where(and(eq(categories.id, id), eq(categories.householdId, householdId)))
+    .returning();
+  return category ?? null;
+}
+
+export async function updateCategory(
+  householdId: string,
+  id: string,
+  name: string,
+  sortOrder = 0,
+) {
+  const [category] = await db
+    .update(categories)
+    .set({ name, sortOrder })
+    .where(and(eq(categories.id, id), eq(categories.householdId, householdId)))
+    .returning();
+  return category ?? null;
+}
+
 export async function listTags(householdId: string, type?: string) {
   const conditions = [eq(tags.householdId, householdId)];
   if (type) conditions.push(eq(tags.type, type));
   return db.select().from(tags).where(and(...conditions)).orderBy(tags.name);
 }
 
+export async function createTag(
+  householdId: string,
+  name: string,
+  type: "ingredient" | "product" | "recipe",
+) {
+  const [tag] = await db.insert(tags).values({ householdId, name, type }).returning();
+  return tag;
+}
+
+export async function deleteTag(householdId: string, id: string) {
+  const [tag] = await db
+    .delete(tags)
+    .where(and(eq(tags.id, id), eq(tags.householdId, householdId)))
+    .returning();
+  return tag ?? null;
+}
+
+export async function updateTag(
+  householdId: string,
+  id: string,
+  name: string,
+) {
+  const [tag] = await db
+    .update(tags)
+    .set({ name })
+    .where(and(eq(tags.id, id), eq(tags.householdId, householdId)))
+    .returning();
+  return tag ?? null;
+}
+
 export async function getIngredientTags(ingredientIds: string[]) {
   if (!ingredientIds.length) return [];
   return db.select().from(ingredientTags).where(inArray(ingredientTags.ingredientId, ingredientIds));
+}
+
+export async function getProductTags(productIds: string[]) {
+  if (!productIds.length) return [];
+  return db.select().from(productTags).where(inArray(productTags.productId, productIds));
 }

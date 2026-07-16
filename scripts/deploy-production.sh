@@ -3,6 +3,14 @@ set -e
 
 cd "$(dirname "$0")/.."
 
+compose_version=$(docker compose version --short | tr -d 'v')
+minimum_compose_version=2.30.0
+oldest_version=$(printf "%s\n%s\n" "$minimum_compose_version" "$compose_version" | sort -V | awk 'NR == 1')
+if [ "$oldest_version" != "$minimum_compose_version" ]; then
+  echo "Docker Compose >= $minimum_compose_version is required (found $compose_version)" >&2
+  exit 1
+fi
+
 compose() {
   COMPOSE_DISABLE_ENV_FILE=1 docker compose "$@"
 }
@@ -49,15 +57,39 @@ require_env AUTHENTIK_CLIENT_SECRET
 echo "Starting database..."
 compose up -d postgres
 
+echo "Creating verified pre-deploy backup..."
+compose run --rm --no-deps --entrypoint /bin/sh backup -c '
+  set -eu
+  target="/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).dump"
+  temporary="$target.tmp"
+  pg_dump -Fc > "$temporary"
+  pg_restore --list "$temporary" >/dev/null
+  mv "$temporary" "$target"
+  tar -czf "/backups/pre-deploy-uploads-$(date +%Y%m%d-%H%M%S).tar.gz" -C /uploads .
+  echo "Backup saved to $target"
+'
+
 echo "Running database migrations..."
 compose run --rm migrate
 
 echo "Building and starting application..."
-compose up -d --build app backup
+compose up -d --build --no-deps app backup
 
-echo ""
-echo "Health check:"
-echo "  curl http://192.168.1.213:3102/api/health"
+echo "Waiting for application readiness..."
+attempt=1
+while [ "$attempt" -le 30 ]; do
+  if curl -fsS http://192.168.1.213:3102/api/health >/dev/null; then
+    echo "Application is healthy"
+    break
+  fi
+  if [ "$attempt" -eq 30 ]; then
+    echo "Application did not become healthy" >&2
+    compose logs --tail=100 app migrate >&2
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  sleep 2
+done
 echo ""
 echo "Authentik redirect URI:"
 echo "  https://food.rozwinswojbiznes.pl/api/auth/callback/authentik"

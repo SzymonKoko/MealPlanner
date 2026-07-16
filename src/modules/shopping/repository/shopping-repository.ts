@@ -37,6 +37,7 @@ export async function generateShoppingList(
 
     let listId: string;
     let manualItems: (typeof shoppingListItems.$inferSelect)[] = [];
+    let automaticItems: (typeof shoppingListItems.$inferSelect)[] = [];
 
     if (existing.length) {
       listId = existing[0].id;
@@ -47,6 +48,15 @@ export async function generateShoppingList(
           and(
             eq(shoppingListItems.shoppingListId, listId),
             eq(shoppingListItems.source, "manual"),
+          ),
+        );
+      automaticItems = await tx
+        .select()
+        .from(shoppingListItems)
+        .where(
+          and(
+            eq(shoppingListItems.shoppingListId, listId),
+            eq(shoppingListItems.source, "automatic"),
           ),
         );
 
@@ -72,19 +82,33 @@ export async function generateShoppingList(
     }
 
     if (aggregated.length) {
+      const previousBySource = new Map(
+        automaticItems.map((item) => [
+          `${item.ingredientId ?? item.productId}-${item.unit}`,
+          item,
+        ]),
+      );
       await tx.insert(shoppingListItems).values(
-        aggregated.map((item) => ({
-          shoppingListId: listId,
-          ingredientId: item.ingredientId,
-          productId: item.productId,
-          name: item.name,
-          requestedQuantity: String(item.quantity),
-          pantryQuantity: "0",
-          quantityToBuy: String(item.quantity),
-          unit: item.unit,
-          categoryId: item.categoryId,
-          source: "automatic" as const,
-        })),
+        aggregated.map((item) => {
+          const previous = previousBySource.get(
+            `${item.ingredientId ?? item.productId}-${item.unit}`,
+          );
+          return {
+            shoppingListId: listId,
+            ingredientId: item.ingredientId,
+            productId: item.productId,
+            name: item.name,
+            requestedQuantity: String(item.quantity),
+            pantryQuantity: "0",
+            quantityToBuy: String(item.quantity),
+            unit: item.unit,
+            categoryId: item.categoryId,
+            source: "automatic" as const,
+            checked: previous?.checked ?? false,
+            checkedBy: previous?.checkedBy ?? null,
+            checkedAt: previous?.checkedAt ?? null,
+          };
+        }),
       );
     }
 
@@ -115,6 +139,32 @@ export async function addManualItem(
     })
     .returning();
   return item;
+}
+
+export async function updateManualItem(
+  itemId: string,
+  data: { name: string; quantityToBuy: string; unit: string; notes?: string },
+) {
+  const [item] = await db
+    .update(shoppingListItems)
+    .set({
+      name: data.name,
+      requestedQuantity: data.quantityToBuy,
+      quantityToBuy: data.quantityToBuy,
+      unit: data.unit,
+      notes: data.notes,
+    })
+    .where(and(eq(shoppingListItems.id, itemId), eq(shoppingListItems.source, "manual")))
+    .returning();
+  return item ?? null;
+}
+
+export async function deleteManualItem(itemId: string) {
+  const [item] = await db
+    .delete(shoppingListItems)
+    .where(and(eq(shoppingListItems.id, itemId), eq(shoppingListItems.source, "manual")))
+    .returning();
+  return item ?? null;
 }
 
 export async function toggleItemChecked(

@@ -1,6 +1,6 @@
 import { db } from "@/db/client";
 import { recipes, recipeIngredients, recipeTags, ingredients, products } from "@/db/schema";
-import { and, eq, isNull, ilike } from "drizzle-orm";
+import { and, eq, isNull, ilike, inArray } from "drizzle-orm";
 
 export async function listRecipes(householdId: string, search?: string) {
   const conditions = [eq(recipes.householdId, householdId), isNull(recipes.deletedAt)];
@@ -30,6 +30,15 @@ export async function getRecipeIngredients(recipeId: string) {
     .orderBy(recipeIngredients.sortOrder);
 }
 
+export async function getRecipeTags(recipeId: string) {
+  return db.select().from(recipeTags).where(eq(recipeTags.recipeId, recipeId));
+}
+
+export async function getRecipeTagsForRecipes(recipeIds: string[]) {
+  if (!recipeIds.length) return [];
+  return db.select().from(recipeTags).where(inArray(recipeTags.recipeId, recipeIds));
+}
+
 export async function getRecipeWithIngredients(householdId: string, id: string) {
   const recipe = await getRecipe(householdId, id);
   if (!recipe) return null;
@@ -41,7 +50,13 @@ export async function getRecipeWithIngredients(householdId: string, id: string) 
         const [ingredient] = await db
           .select()
           .from(ingredients)
-          .where(eq(ingredients.id, ri.ingredientId))
+          .where(
+            and(
+              eq(ingredients.id, ri.ingredientId),
+              eq(ingredients.householdId, householdId),
+              isNull(ingredients.deletedAt),
+            ),
+          )
           .limit(1);
         return { ...ri, source: ingredient };
       }
@@ -49,7 +64,12 @@ export async function getRecipeWithIngredients(householdId: string, id: string) 
         const [product] = await db
           .select()
           .from(products)
-          .where(eq(products.id, ri.productId))
+          .where(
+            and(
+              eq(products.id, ri.productId),
+              eq(products.householdId, householdId),
+            ),
+          )
           .limit(1);
         return { ...ri, source: product };
       }
@@ -115,6 +135,8 @@ export async function updateRecipe(
       .where(and(eq(recipes.id, id), eq(recipes.householdId, householdId)))
       .returning();
 
+    if (!recipe) return null;
+
     if (ingredientsData) {
       await tx.delete(recipeIngredients).where(eq(recipeIngredients.recipeId, id));
       if (ingredientsData.length) {
@@ -140,8 +162,10 @@ export async function updateRecipe(
 }
 
 export async function softDeleteRecipe(householdId: string, id: string) {
-  await db
+  const [recipe] = await db
     .update(recipes)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(recipes.id, id), eq(recipes.householdId, householdId)));
+    .where(and(eq(recipes.id, id), eq(recipes.householdId, householdId)))
+    .returning();
+  return recipe ?? null;
 }

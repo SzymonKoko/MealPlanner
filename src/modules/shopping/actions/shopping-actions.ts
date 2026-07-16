@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireActiveHousehold } from "@/server/require-household-member";
+import {
+  requireActiveHousehold,
+  requireActiveHouseholdEditor,
+} from "@/server/require-household-member";
 import {
   generateShoppingListSchema,
   manualItemSchema,
@@ -12,6 +15,8 @@ import {
   addManualItem,
   toggleItemChecked,
   getShoppingListWithItems,
+  updateManualItem,
+  deleteManualItem,
 } from "../repository/shopping-repository";
 import { AppError } from "@/lib/errors";
 import { db } from "@/db/client";
@@ -19,7 +24,7 @@ import { shoppingListItems, shoppingLists } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 
 export async function generateShoppingListAction(formData: FormData) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   const parsed = generateShoppingListSchema.safeParse({
     name: formData.get("name"),
     dateFrom: formData.get("dateFrom"),
@@ -40,7 +45,7 @@ export async function generateShoppingListAction(formData: FormData) {
 }
 
 export async function addManualShoppingItemAction(formData: FormData) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   const parsed = manualItemSchema.safeParse({
     shoppingListId: formData.get("shoppingListId"),
     name: formData.get("name"),
@@ -71,7 +76,7 @@ export async function addManualShoppingItemAction(formData: FormData) {
 }
 
 export async function toggleShoppingItemAction(formData: FormData) {
-  const { user, householdId } = await requireActiveHousehold();
+  const { user, householdId } = await requireActiveHouseholdEditor();
   const parsed = toggleItemSchema.safeParse({
     itemId: formData.get("itemId"),
     checked: formData.get("checked") === "true",
@@ -93,6 +98,46 @@ export async function toggleShoppingItemAction(formData: FormData) {
   }
 
   await toggleItemChecked(parsed.data.itemId, parsed.data.checked, user.id);
+  revalidatePath("/shopping");
+}
+
+async function requireShoppingItem(householdId: string, itemId: string) {
+  const [item] = await db
+    .select({ item: shoppingListItems, list: shoppingLists })
+    .from(shoppingListItems)
+    .innerJoin(shoppingLists, eq(shoppingListItems.shoppingListId, shoppingLists.id))
+    .where(eq(shoppingListItems.id, itemId))
+    .limit(1);
+  if (!item || item.list.householdId !== householdId) {
+    throw new AppError("Pozycja nie istnieje", "NOT_FOUND", 404);
+  }
+  return item.item;
+}
+
+export async function updateManualShoppingItemAction(itemId: string, formData: FormData) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  await requireShoppingItem(householdId, itemId);
+  const parsed = manualItemSchema.omit({ shoppingListId: true }).safeParse({
+    name: formData.get("name"),
+    quantityToBuy: formData.get("quantityToBuy"),
+    unit: formData.get("unit"),
+    notes: formData.get("notes") || undefined,
+  });
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+  if (!(await updateManualItem(itemId, parsed.data))) {
+    throw new AppError("Nie można edytować pozycji automatycznej", "VALIDATION_ERROR");
+  }
+  revalidatePath("/shopping");
+}
+
+export async function deleteManualShoppingItemAction(itemId: string) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  await requireShoppingItem(householdId, itemId);
+  if (!(await deleteManualItem(itemId))) {
+    throw new AppError("Nie można usunąć pozycji automatycznej", "VALIDATION_ERROR");
+  }
   revalidatePath("/shopping");
 }
 

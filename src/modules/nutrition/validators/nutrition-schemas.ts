@@ -1,9 +1,15 @@
 import { z } from "zod";
 
+const optionalNonNegativeNumber = z
+  .string()
+  .regex(/^\d+([.,]\d+)?$/, "Wartość musi być liczbą nieujemną")
+  .transform((value) => value.replace(",", "."))
+  .optional();
+
 export const nutritionGoalsSchema = z.object({
-  kcalTarget: z.string().optional(),
-  proteinTarget: z.string().optional(),
-  carbsTarget: z.string().optional(),
-  fatTarget: z.string().optional(),
-  fiberTarget: z.string().optional(),
+  kcalTarget: optionalNonNegativeNumber,
+  proteinTarget: optionalNonNegativeNumber,
+  carbsTarget: optionalNonNegativeNumber,
+  fatTarget: optionalNonNegativeNumber,
+  fiberTarget: optionalNonNegativeNumber,
 });

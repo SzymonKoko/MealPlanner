@@ -110,7 +110,10 @@ Backup bez przetestowanego odtwarzania nie jest wystarczający.
 
 Migracje powinny uruchamiać się kontrolowanie.
 
-Compose uruchamia usługę `migrate` przed aplikacją. Migracje muszą być idempotentne albo kontrolowane przed wdrożeniem. Nie wykonywać nieodwracalnych migracji automatycznie bez kopii zapasowej.
+Skrypt wdrożeniowy wykonuje zweryfikowany backup bazy i uploadów, a następnie
+uruchamia usługę `migrate` przed aplikacją. Migrator stosuje pliki SQL kolejno,
+zapisuje ich checksumy i blokuje równoległe wykonanie w PostgreSQL. Wykonanych
+migracji nie wolno edytować. Każda zmiana schematu wymaga nowego pliku SQL.
 
 ## Logowanie
 

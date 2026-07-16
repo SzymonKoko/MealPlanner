@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, ChefHat, Home, MoreHorizontal, ShoppingCart } from "lucide-react";
+import { CalendarDays, ChefHat, Home, MoreHorizontal, PackageOpen, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -7,6 +7,7 @@ const navItems = [
   { href: "/plan", label: "Plan", icon: CalendarDays },
   { href: "/shopping", label: "Zakupy", icon: ShoppingCart },
   { href: "/recipes", label: "Przepisy", icon: ChefHat },
+  { href: "/ingredients", label: "Składniki", icon: PackageOpen },
   { href: "/more", label: "Więcej", icon: MoreHorizontal },
 ];
 

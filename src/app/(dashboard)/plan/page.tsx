@@ -1,17 +1,18 @@
 import { DashboardShell } from "@/components/shared/dashboard-shell";
-import { requireActiveHousehold } from "@/server/require-household-member";
+import { requireActiveHouseholdOrRedirect } from "@/server/require-household-member";
 import { getMealPlanForWeek } from "@/modules/meal-planner/repository/meal-plan-repository";
 import { listRecipes } from "@/modules/recipes/repository/recipe-repository";
 import { getHouseholdMembers } from "@/modules/households/repository/household-repository";
 import { MealPlanView } from "@/modules/meal-planner/components/meal-plan-view";
 import { formatDateISO, getWeekStart } from "@/lib/dates";
+import { canEdit } from "@/modules/households/services/role-checks";
 
 interface PlanPageProps {
   searchParams: Promise<{ week?: string }>;
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId, role } = await requireActiveHouseholdOrRedirect();
   const params = await searchParams;
   const weekStart = params.week ?? formatDateISO(getWeekStart());
 
@@ -28,6 +29,9 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     date: e.entry.date,
     mealType: e.entry.mealType,
     servings: e.entry.servings,
+    notes: e.entry.notes,
+    status: e.entry.status,
+    isBatchCooking: e.entry.isBatchCooking,
   }));
 
   const assignments = plan.assignments.map((a) => ({
@@ -47,6 +51,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           assignments={assignments}
           recipes={recipes.map((r) => ({ id: r.id, name: r.name }))}
           members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
+          editable={canEdit(role)}
         />
       </div>
     </DashboardShell>

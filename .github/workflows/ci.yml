@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          AUTH_SECRET: ci-secret-at-least-32-characters-long
+          AUTH_URL: http://localhost:3000
+          AUTHENTIK_ISSUER: https://auth.example.com/application/o/meal-planner/
+          AUTHENTIK_CLIENT_ID: ci-client
+          AUTHENTIK_CLIENT_SECRET: ci-secret
+          DATABASE_URL: postgresql://mealplanner:mealplanner@localhost:5432/mealplanner
+          DEV_AUTH_BYPASS: "false"

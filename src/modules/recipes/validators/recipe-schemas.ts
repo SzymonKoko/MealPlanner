@@ -5,7 +5,11 @@ export const recipeIngredientSchema = z
   .object({
     ingredientId: z.string().uuid().optional().nullable(),
     productId: z.string().uuid().optional().nullable(),
-    quantity: z.string().min(1),
+    quantity: z
+      .string()
+      .regex(/^\d+([.,]\d+)?$/, "Ilość musi być liczbą dodatnią")
+      .transform((value) => value.replace(",", "."))
+      .refine((value) => Number(value) > 0, "Ilość musi być większa od zera"),
     unit: z.enum(SUPPORTED_UNITS),
     optional: z.boolean().default(false),
     sortOrder: z.number().int().default(0),
@@ -19,9 +23,13 @@ export const recipeSchema = z.object({
   description: z.string().max(2000).optional(),
   instructions: z.string().max(10000).optional(),
   servings: z.coerce.number().int().min(1).default(1),
-  prepTimeMinutes: z.coerce.number().int().optional(),
-  cookTimeMinutes: z.coerce.number().int().optional(),
-  imageUrl: z.string().url().optional().nullable(),
+  prepTimeMinutes: z.coerce.number().int().min(0).optional(),
+  cookTimeMinutes: z.coerce.number().int().min(0).optional(),
+  imageUrl: z
+    .string()
+    .refine((value) => value.startsWith("/") || URL.canParse(value), "Nieprawidłowy adres zdjęcia")
+    .optional()
+    .nullable(),
   ingredients: z.array(recipeIngredientSchema).min(1),
   tagIds: z.array(z.string().uuid()).optional(),
 });

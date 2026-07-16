@@ -2,15 +2,17 @@ import { DashboardShell } from "@/components/shared/dashboard-shell";
 import { requireAuth } from "@/server/require-auth";
 import { listUserHouseholds } from "@/modules/households/repository/household-repository";
 import { getTodayNutritionAction } from "@/modules/nutrition/actions/nutrition-actions";
-import { getMealPlanForDate } from "@/modules/meal-planner/repository/meal-plan-repository";
-import { requireActiveHousehold } from "@/server/require-household-member";
+import { requireActiveHouseholdOrRedirect } from "@/server/require-household-member";
 import { formatDisplayDate, formatDateISO } from "@/lib/dates";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { redirect } from "next/navigation";
 import { createHousehold } from "@/modules/households/actions/household-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MEAL_TYPE_LABELS } from "@/lib/meal-types";
+import Link from "next/link";
+import { listRecipes } from "@/modules/recipes/repository/recipe-repository";
+import { addMealPlanEntryAction } from "@/modules/meal-planner/actions/meal-plan-actions";
+import { canEdit } from "@/modules/households/services/role-checks";
 
 export default async function TodayPage() {
   const user = await requireAuth();
@@ -34,18 +36,12 @@ export default async function TodayPage() {
     );
   }
 
-  let householdId: string;
-  try {
-    const ctx = await requireActiveHousehold();
-    householdId = ctx.householdId;
-  } catch {
-    redirect("/more");
-  }
+  const household = await requireActiveHouseholdOrRedirect();
 
   const today = formatDateISO(new Date());
-  const [nutrition, meals] = await Promise.all([
+  const [nutrition, recipes] = await Promise.all([
     getTodayNutritionAction(today),
-    getMealPlanForDate(householdId, today),
+    listRecipes(household.householdId),
   ]);
 
   const progress = nutrition.progress;
@@ -56,7 +52,33 @@ export default async function TodayPage() {
         <div>
           <h1 className="text-2xl font-bold">Dzisiaj</h1>
           <p className="text-muted-foreground">{formatDisplayDate(new Date())}</p>
+          <div className="mt-3 flex gap-2">
+            <Button asChild size="sm"><Link href="/plan">Otwórz planer</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href="/more">Ustaw cele</Link></Button>
+          </div>
         </div>
+
+        {canEdit(household.role) && recipes.length ? (
+          <Card>
+            <CardHeader><CardTitle>Szybko dodaj posiłek</CardTitle></CardHeader>
+            <CardContent>
+              <form action={addMealPlanEntryAction} className="grid gap-2 sm:grid-cols-[1fr_12rem_7rem_auto]">
+                <select name="recipeId" className="h-11 rounded-lg border bg-background px-3" required>
+                  <option value="">Wybierz przepis</option>
+                  {recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
+                </select>
+                <select name="mealType" defaultValue="lunch" className="h-11 rounded-lg border bg-background px-3">
+                  {Object.entries(MEAL_TYPE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <Input name="servings" type="number" min="1" defaultValue="1" aria-label="Liczba porcji" />
+                <input type="hidden" name="date" value={today} />
+                <Button type="submit">Dodaj</Button>
+              </form>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <NutritionCard label="Kalorie" consumed={progress.kcal.consumed} target={progress.kcal.target} unit="kcal" />
@@ -71,15 +93,15 @@ export default async function TodayPage() {
             <CardTitle>Zaplanowane posiłki</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {meals.length === 0 ? (
-              <p className="text-muted-foreground">Brak zaplanowanych posiłków na dziś.</p>
+            {nutrition.meals.length === 0 ? (
+              <p className="text-muted-foreground">Nie masz przypisanych porcji na dziś.</p>
             ) : (
-              meals.map(({ entry, recipeName }) => (
-                <div key={entry.id} className="flex items-center justify-between rounded-lg border p-3">
+              nutrition.meals.map((meal) => (
+                <div key={meal.entryId} className="flex items-center justify-between rounded-lg border p-3">
                   <div>
-                    <p className="font-medium">{recipeName}</p>
+                    <p className="font-medium">{meal.recipeName}</p>
                     <p className="text-sm text-muted-foreground">
-                      {MEAL_TYPE_LABELS[entry.mealType as keyof typeof MEAL_TYPE_LABELS]} · {entry.servings} porcji
+                      {MEAL_TYPE_LABELS[meal.mealType as keyof typeof MEAL_TYPE_LABELS]} · Twoje porcje: {meal.servings}
                     </p>
                   </div>
                 </div>

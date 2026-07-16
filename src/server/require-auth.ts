@@ -38,6 +38,25 @@ export async function requireAuth(): Promise<AuthUser> {
         avatarUrl: session.user.image ?? null,
       })
       .returning();
+  } else {
+    const displayName = session.user.name ?? session.user.email;
+    const avatarUrl = session.user.image ?? null;
+    if (
+      user.email !== session.user.email ||
+      user.displayName !== displayName ||
+      user.avatarUrl !== avatarUrl
+    ) {
+      [user] = await db
+        .update(users)
+        .set({
+          email: session.user.email,
+          displayName,
+          avatarUrl,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id))
+        .returning();
+    }
   }
 
   return {

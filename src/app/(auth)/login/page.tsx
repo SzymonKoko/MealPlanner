@@ -4,14 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { safeInternalRedirect } from "@/lib/redirects";
 
 const isDevBypass =
   process.env.NODE_ENV === "development" && process.env.DEV_AUTH_BYPASS === "true";
 
-export default async function LoginPage() {
+interface LoginPageProps {
+  searchParams: Promise<{ callbackUrl?: string }>;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  const callbackUrl = safeInternalRedirect(params.callbackUrl);
   const session = await auth();
   if (session?.user) {
-    redirect("/today");
+    redirect(callbackUrl);
   }
 
   return (
@@ -27,7 +34,7 @@ export default async function LoginPage() {
             <form
               action={async () => {
                 "use server";
-                await signIn("authentik", { redirectTo: "/today" });
+                await signIn("authentik", { redirectTo: callbackUrl });
               }}
             >
               <Button type="submit" className="w-full">
@@ -43,7 +50,7 @@ export default async function LoginPage() {
                 await signIn("dev-bypass", {
                   email: formData.get("email") as string,
                   name: formData.get("name") as string,
-                  redirectTo: "/today",
+                  redirectTo: callbackUrl,
                 });
               }}
               className="space-y-4"

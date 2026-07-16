@@ -5,7 +5,7 @@ import {
   recipes,
   users,
 } from "@/db/schema";
-import { and, eq, gte, lte, between, inArray } from "drizzle-orm";
+import { and, eq, gte, lte, between, inArray, isNull } from "drizzle-orm";
 import { addDays, format, parseISO } from "date-fns";
 import type { MealType } from "@/db/schema/meal-planner";
 
@@ -27,6 +27,7 @@ export async function getMealPlanForWeek(householdId: string, weekStart: string)
       and(
         eq(mealPlanEntries.householdId, householdId),
         between(mealPlanEntries.date, dateFrom, dateTo),
+        isNull(recipes.deletedAt),
       ),
     )
     .orderBy(mealPlanEntries.date, mealPlanEntries.mealType);
@@ -54,7 +55,13 @@ export async function getMealPlanForDate(householdId: string, date: string) {
     })
     .from(mealPlanEntries)
     .innerJoin(recipes, eq(mealPlanEntries.recipeId, recipes.id))
-    .where(and(eq(mealPlanEntries.householdId, householdId), eq(mealPlanEntries.date, date)))
+    .where(
+      and(
+        eq(mealPlanEntries.householdId, householdId),
+        eq(mealPlanEntries.date, date),
+        isNull(recipes.deletedAt),
+      ),
+    )
     .orderBy(mealPlanEntries.mealType);
 }
 
@@ -89,6 +96,8 @@ export async function updateMealPlanEntry(
     servings: number;
     notes: string;
     recipeId: string;
+    status: string;
+    isBatchCooking: boolean;
   }>,
 ) {
   const [entry] = await db
@@ -105,29 +114,53 @@ export async function deleteMealPlanEntry(householdId: string, entryId: string) 
     .where(and(eq(mealPlanEntries.id, entryId), eq(mealPlanEntries.householdId, householdId)));
 }
 
-export async function copyMealPlanEntry(householdId: string, userId: string, entryId: string) {
-  const [original] = await db
-    .select()
-    .from(mealPlanEntries)
-    .where(and(eq(mealPlanEntries.id, entryId), eq(mealPlanEntries.householdId, householdId)))
-    .limit(1);
+export async function copyMealPlanEntry(
+  householdId: string,
+  userId: string,
+  entryId: string,
+  targetDate?: string,
+  targetMealType?: MealType,
+) {
+  return db.transaction(async (tx) => {
+    const [original] = await tx
+      .select()
+      .from(mealPlanEntries)
+      .where(and(eq(mealPlanEntries.id, entryId), eq(mealPlanEntries.householdId, householdId)))
+      .limit(1);
 
-  if (!original) return null;
+    if (!original) return null;
 
-  const [copy] = await db
-    .insert(mealPlanEntries)
-    .values({
-      householdId,
-      recipeId: original.recipeId,
-      date: original.date,
-      mealType: original.mealType,
-      servings: original.servings,
-      notes: original.notes,
-      createdBy: userId,
-    })
-    .returning();
+    const [copy] = await tx
+      .insert(mealPlanEntries)
+      .values({
+        householdId,
+        recipeId: original.recipeId,
+        date: targetDate ?? original.date,
+        mealType: targetMealType ?? original.mealType,
+        servings: original.servings,
+        notes: original.notes,
+        status: original.status,
+        isBatchCooking: original.isBatchCooking,
+        createdBy: userId,
+      })
+      .returning();
 
-  return copy;
+    const assignments = await tx
+      .select()
+      .from(mealPlanAssignments)
+      .where(eq(mealPlanAssignments.mealPlanEntryId, original.id));
+    if (assignments.length) {
+      await tx.insert(mealPlanAssignments).values(
+        assignments.map((assignment) => ({
+          mealPlanEntryId: copy.id,
+          userId: assignment.userId,
+          servings: assignment.servings,
+        })),
+      );
+    }
+
+    return copy;
+  });
 }
 
 export async function copyPreviousWeek(
@@ -143,36 +176,64 @@ export async function copyPreviousWeek(
     (targetStart.getTime() - sourceStart.getTime()) / (1000 * 60 * 60 * 24),
   );
 
-  const sourceEntries = await db
-    .select()
-    .from(mealPlanEntries)
-    .where(
-      and(
-        eq(mealPlanEntries.householdId, householdId),
-        between(
-          mealPlanEntries.date,
-          format(sourceStart, "yyyy-MM-dd"),
-          format(sourceEnd, "yyyy-MM-dd"),
+  return db.transaction(async (tx) => {
+    const sourceEntries = await tx
+      .select()
+      .from(mealPlanEntries)
+      .where(
+        and(
+          eq(mealPlanEntries.householdId, householdId),
+          between(
+            mealPlanEntries.date,
+            format(sourceStart, "yyyy-MM-dd"),
+            format(sourceEnd, "yyyy-MM-dd"),
+          ),
         ),
-      ),
+      );
+
+    if (!sourceEntries.length) return [];
+
+    const sourceAssignments = await tx
+      .select()
+      .from(mealPlanAssignments)
+      .where(inArray(mealPlanAssignments.mealPlanEntryId, sourceEntries.map((entry) => entry.id)));
+
+    const copies = await tx
+      .insert(mealPlanEntries)
+      .values(
+        sourceEntries.map((entry) => ({
+          householdId,
+          recipeId: entry.recipeId,
+          date: format(addDays(parseISO(entry.date), dayOffset), "yyyy-MM-dd"),
+          mealType: entry.mealType,
+          servings: entry.servings,
+          notes: entry.notes,
+          status: entry.status,
+          isBatchCooking: entry.isBatchCooking,
+          createdBy: userId,
+        })),
+      )
+      .returning();
+
+    const copiedIdBySourceId = new Map(
+      sourceEntries.map((entry, index) => [entry.id, copies[index].id]),
     );
+    const assignmentsToCopy = sourceAssignments.flatMap((assignment) => {
+      const copiedEntryId = copiedIdBySourceId.get(assignment.mealPlanEntryId);
+      return copiedEntryId
+        ? [{
+            mealPlanEntryId: copiedEntryId,
+            userId: assignment.userId,
+            servings: assignment.servings,
+          }]
+        : [];
+    });
+    if (assignmentsToCopy.length) {
+      await tx.insert(mealPlanAssignments).values(assignmentsToCopy);
+    }
 
-  if (!sourceEntries.length) return [];
-
-  const copies = sourceEntries.map((entry) => {
-    const newDate = format(addDays(parseISO(entry.date), dayOffset), "yyyy-MM-dd");
-    return {
-      householdId,
-      recipeId: entry.recipeId,
-      date: newDate,
-      mealType: entry.mealType,
-      servings: entry.servings,
-      notes: entry.notes,
-      createdBy: userId,
-    };
+    return copies;
   });
-
-  return db.insert(mealPlanEntries).values(copies).returning();
 }
 
 export async function setAssignment(
@@ -180,6 +241,19 @@ export async function setAssignment(
   userId: string,
   servings: number,
 ) {
+  if (servings === 0) {
+    const [removed] = await db
+      .delete(mealPlanAssignments)
+      .where(
+        and(
+          eq(mealPlanAssignments.mealPlanEntryId, mealPlanEntryId),
+          eq(mealPlanAssignments.userId, userId),
+        ),
+      )
+      .returning();
+    return removed ?? null;
+  }
+
   const [existing] = await db
     .select()
     .from(mealPlanAssignments)

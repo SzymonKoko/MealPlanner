@@ -1,12 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireActiveHousehold } from "@/server/require-household-member";
+import {
+  requireActiveHousehold,
+  requireActiveHouseholdEditor,
+} from "@/server/require-household-member";
 import {
   mealPlanEntrySchema,
   moveMealPlanEntrySchema,
   assignmentSchema,
   copyWeekSchema,
+  mealPlanDetailsSchema,
 } from "../validators/meal-plan-schemas";
 import {
   createMealPlanEntry,
@@ -20,11 +24,15 @@ import {
 } from "../repository/meal-plan-repository";
 import { AppError } from "@/lib/errors";
 import { db } from "@/db/client";
-import { mealPlanEntries } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { householdMembers, mealPlanEntries, recipes } from "@/db/schema";
+import { and, eq, isNull } from "drizzle-orm";
+import {
+  canSetAssignment,
+  totalAssignedServings,
+} from "../services/portion-allocation";
 
 export async function addMealPlanEntryAction(formData: FormData) {
-  const { user, householdId } = await requireActiveHousehold();
+  const { user, householdId } = await requireActiveHouseholdEditor();
   const parsed = mealPlanEntrySchema.safeParse({
     recipeId: formData.get("recipeId"),
     date: formData.get("date"),
@@ -37,13 +45,26 @@ export async function addMealPlanEntryAction(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
+  const [recipe] = await db
+    .select({ id: recipes.id })
+    .from(recipes)
+    .where(
+      and(
+        eq(recipes.id, parsed.data.recipeId),
+        eq(recipes.householdId, householdId),
+        isNull(recipes.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!recipe) throw new AppError("Przepis nie należy do gospodarstwa", "VALIDATION_ERROR");
+
   await createMealPlanEntry(householdId, user.id, parsed.data);
   revalidatePath("/plan");
   revalidatePath("/today");
 }
 
 export async function moveMealPlanEntryAction(formData: FormData) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   const parsed = moveMealPlanEntrySchema.safeParse({
     entryId: formData.get("entryId"),
     date: formData.get("date"),
@@ -54,34 +75,98 @@ export async function moveMealPlanEntryAction(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  await updateMealPlanEntry(householdId, parsed.data.entryId, {
+  const entry = await updateMealPlanEntry(householdId, parsed.data.entryId, {
     date: parsed.data.date,
     mealType: parsed.data.mealType,
   });
+  if (!entry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
   revalidatePath("/plan");
 }
 
 export async function updateMealPlanServingsAction(entryId: string, servings: number) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   await updateMealPlanEntry(householdId, entryId, { servings });
   revalidatePath("/plan");
 }
 
+export async function updateMealPlanDetailsAction(formData: FormData) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  const parsed = mealPlanDetailsSchema.safeParse({
+    entryId: formData.get("entryId"),
+    servings: formData.get("servings"),
+    notes: formData.get("notes") || undefined,
+    status: formData.get("status") || "planned",
+    isBatchCooking: formData.get("isBatchCooking") === "true",
+  });
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+  const [existingEntry] = await db
+    .select({ id: mealPlanEntries.id })
+    .from(mealPlanEntries)
+    .where(
+      and(
+        eq(mealPlanEntries.id, parsed.data.entryId),
+        eq(mealPlanEntries.householdId, householdId),
+      ),
+    )
+    .limit(1);
+  if (!existingEntry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
+  const assignments = await getAssignmentsForEntry(parsed.data.entryId);
+  const assignedServings = totalAssignedServings(assignments);
+  if (assignedServings > parsed.data.servings) {
+    throw new AppError(
+      "Nowa liczba porcji jest mniejsza niż suma porcji przypisanych domownikom",
+      "VALIDATION_ERROR",
+    );
+  }
+  const entry = await updateMealPlanEntry(householdId, parsed.data.entryId, {
+    servings: parsed.data.servings,
+    notes: parsed.data.notes,
+    status: parsed.data.status,
+    isBatchCooking: parsed.data.isBatchCooking,
+  });
+  if (!entry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
+  revalidatePath("/plan");
+  revalidatePath("/today");
+}
+
 export async function deleteMealPlanEntryAction(entryId: string) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   await deleteMealPlanEntry(householdId, entryId);
   revalidatePath("/plan");
   revalidatePath("/today");
 }
 
 export async function copyMealPlanEntryAction(entryId: string) {
-  const { user, householdId } = await requireActiveHousehold();
+  const { user, householdId } = await requireActiveHouseholdEditor();
   await copyMealPlanEntry(householdId, user.id, entryId);
   revalidatePath("/plan");
 }
 
+export async function copyMealPlanEntryToAction(formData: FormData) {
+  const { user, householdId } = await requireActiveHouseholdEditor();
+  const parsed = moveMealPlanEntrySchema.safeParse({
+    entryId: formData.get("entryId"),
+    date: formData.get("date"),
+    mealType: formData.get("mealType"),
+  });
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+  const copy = await copyMealPlanEntry(
+    householdId,
+    user.id,
+    parsed.data.entryId,
+    parsed.data.date,
+    parsed.data.mealType,
+  );
+  if (!copy) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
+  revalidatePath("/plan");
+}
+
 export async function copyPreviousWeekAction(formData: FormData) {
-  const { user, householdId } = await requireActiveHousehold();
+  const { user, householdId } = await requireActiveHouseholdEditor();
   const parsed = copyWeekSchema.safeParse({
     sourceWeekStart: formData.get("sourceWeekStart"),
     targetWeekStart: formData.get("targetWeekStart"),
@@ -101,7 +186,7 @@ export async function copyPreviousWeekAction(formData: FormData) {
 }
 
 export async function assignPortionsAction(formData: FormData) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   const parsed = assignmentSchema.safeParse({
     mealPlanEntryId: formData.get("mealPlanEntryId"),
     userId: formData.get("userId"),
@@ -125,12 +210,29 @@ export async function assignPortionsAction(formData: FormData) {
 
   if (!entry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
 
-  const assignments = await getAssignmentsForEntry(parsed.data.mealPlanEntryId);
-  const otherTotal = assignments
-    .filter((a) => a.userId !== parsed.data.userId)
-    .reduce((sum, a) => sum + a.servings, 0);
+  const [member] = await db
+    .select({ id: householdMembers.id })
+    .from(householdMembers)
+    .where(
+      and(
+        eq(householdMembers.householdId, householdId),
+        eq(householdMembers.userId, parsed.data.userId),
+      ),
+    )
+    .limit(1);
+  if (!member) {
+    throw new AppError("Użytkownik nie należy do gospodarstwa", "VALIDATION_ERROR");
+  }
 
-  if (otherTotal + parsed.data.servings > entry.servings) {
+  const assignments = await getAssignmentsForEntry(parsed.data.mealPlanEntryId);
+  if (
+    !canSetAssignment(
+      entry.servings,
+      assignments,
+      parsed.data.userId,
+      parsed.data.servings,
+    )
+  ) {
     throw new AppError("Suma porcji przekracza liczbę porcji posiłku", "VALIDATION_ERROR");
   }
 

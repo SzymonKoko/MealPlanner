@@ -1,8 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireActiveHousehold } from "@/server/require-household-member";
-import { ingredientSchema, productSchema, categorySchema } from "../validators/ingredient-schemas";
+import {
+  requireActiveHousehold,
+  requireActiveHouseholdEditor,
+} from "@/server/require-household-member";
+import {
+  ingredientSchema,
+  productSchema,
+  categorySchema,
+  tagSchema,
+} from "../validators/ingredient-schemas";
 import {
   createIngredient,
   updateIngredient,
@@ -10,11 +18,56 @@ import {
   createProduct,
   createCategory,
   listIngredients,
+  getIngredient,
+  updateProduct,
+  deleteProduct,
+  deleteCategory,
+  createTag,
+  deleteTag,
+  updateCategory,
+  updateTag,
 } from "../repository/ingredient-repository";
 import { AppError } from "@/lib/errors";
+import { db } from "@/db/client";
+import { categories, tags } from "@/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+
+async function validateIngredientReferences(
+  householdId: string,
+  categoryId?: string | null,
+  tagIds?: string[],
+  tagType: "ingredient" | "product" = "ingredient",
+) {
+  if (categoryId) {
+    const [category] = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.id, categoryId), eq(categories.householdId, householdId)))
+      .limit(1);
+    if (!category) {
+      throw new AppError("Kategoria nie należy do gospodarstwa", "VALIDATION_ERROR");
+    }
+  }
+
+  if (tagIds?.length) {
+    const householdTags = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(
+        and(
+          eq(tags.householdId, householdId),
+          eq(tags.type, tagType),
+          inArray(tags.id, tagIds),
+        ),
+      );
+    if (householdTags.length !== new Set(tagIds).size) {
+      throw new AppError("Co najmniej jeden tag nie należy do gospodarstwa", "VALIDATION_ERROR");
+    }
+  }
+}
 
 export async function createIngredientAction(formData: FormData) {
-  const { user, householdId } = await requireActiveHousehold();
+  const { user, householdId } = await requireActiveHouseholdEditor();
   const parsed = ingredientSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
@@ -25,6 +78,9 @@ export async function createIngredientAction(formData: FormData) {
     carbsPer100: formData.get("carbsPer100") || undefined,
     fatPer100: formData.get("fatPer100") || undefined,
     fiberPer100: formData.get("fiberPer100") || undefined,
+    densityGramsPerMl: formData.get("densityGramsPerMl") || undefined,
+    allergens: formData.get("allergens") || undefined,
+    tagIds: formData.getAll("tagIds"),
   });
 
   if (!parsed.success) {
@@ -32,12 +88,13 @@ export async function createIngredientAction(formData: FormData) {
   }
 
   const { tagIds, ...data } = parsed.data;
+  await validateIngredientReferences(householdId, data.categoryId, tagIds);
   await createIngredient(householdId, user.id, data, tagIds);
   revalidatePath("/ingredients");
 }
 
 export async function updateIngredientAction(id: string, formData: FormData) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   const parsed = ingredientSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
@@ -48,6 +105,9 @@ export async function updateIngredientAction(id: string, formData: FormData) {
     carbsPer100: formData.get("carbsPer100") || undefined,
     fatPer100: formData.get("fatPer100") || undefined,
     fiberPer100: formData.get("fiberPer100") || undefined,
+    densityGramsPerMl: formData.get("densityGramsPerMl") || undefined,
+    allergens: formData.get("allergens") || undefined,
+    tagIds: formData.getAll("tagIds"),
   });
 
   if (!parsed.success) {
@@ -55,18 +115,24 @@ export async function updateIngredientAction(id: string, formData: FormData) {
   }
 
   const { tagIds, ...data } = parsed.data;
-  await updateIngredient(householdId, id, data, tagIds);
+  await validateIngredientReferences(householdId, data.categoryId, tagIds);
+  const ingredient = await updateIngredient(householdId, id, data, tagIds);
+  if (!ingredient) {
+    throw new AppError("Składnik nie istnieje", "NOT_FOUND", 404);
+  }
   revalidatePath("/ingredients");
 }
 
 export async function deleteIngredientAction(id: string) {
-  const { householdId } = await requireActiveHousehold();
-  await softDeleteIngredient(householdId, id);
+  const { householdId } = await requireActiveHouseholdEditor();
+  if (!(await softDeleteIngredient(householdId, id))) {
+    throw new AppError("Składnik nie istnieje", "NOT_FOUND", 404);
+  }
   revalidatePath("/ingredients");
 }
 
 export async function createProductAction(formData: FormData) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   const parsed = productSchema.safeParse({
     ingredientId: formData.get("ingredientId") || null,
     name: formData.get("name"),
@@ -79,18 +145,66 @@ export async function createProductAction(formData: FormData) {
     carbsPer100: formData.get("carbsPer100") || undefined,
     fatPer100: formData.get("fatPer100") || undefined,
     fiberPer100: formData.get("fiberPer100") || undefined,
+    tagIds: formData.getAll("tagIds"),
   });
 
   if (!parsed.success) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
 
-  await createProduct(householdId, parsed.data);
+  if (parsed.data.ingredientId) {
+    const ingredient = await getIngredient(householdId, parsed.data.ingredientId);
+    if (!ingredient) {
+      throw new AppError("Składnik nie należy do gospodarstwa", "VALIDATION_ERROR");
+    }
+  }
+
+  const { tagIds, ...data } = parsed.data;
+  await validateIngredientReferences(householdId, null, tagIds, "product");
+  await createProduct(householdId, data, tagIds);
+  revalidatePath("/ingredients");
+}
+
+export async function updateProductAction(id: string, formData: FormData) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  const parsed = productSchema.safeParse({
+    ingredientId: formData.get("ingredientId") || null,
+    name: formData.get("name"),
+    brand: formData.get("brand") || undefined,
+    barcode: formData.get("barcode") || undefined,
+    packageQuantity: formData.get("packageQuantity") || undefined,
+    packageUnit: formData.get("packageUnit") || undefined,
+    kcalPer100: formData.get("kcalPer100") || undefined,
+    proteinPer100: formData.get("proteinPer100") || undefined,
+    carbsPer100: formData.get("carbsPer100") || undefined,
+    fatPer100: formData.get("fatPer100") || undefined,
+    fiberPer100: formData.get("fiberPer100") || undefined,
+    tagIds: formData.getAll("tagIds"),
+  });
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+  if (parsed.data.ingredientId && !(await getIngredient(householdId, parsed.data.ingredientId))) {
+    throw new AppError("Składnik nie należy do gospodarstwa", "VALIDATION_ERROR");
+  }
+  const { tagIds, ...data } = parsed.data;
+  await validateIngredientReferences(householdId, null, tagIds, "product");
+  if (!(await updateProduct(householdId, id, data, tagIds))) {
+    throw new AppError("Produkt nie istnieje", "NOT_FOUND", 404);
+  }
+  revalidatePath("/ingredients");
+}
+
+export async function deleteProductAction(id: string) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  if (!(await deleteProduct(householdId, id))) {
+    throw new AppError("Produkt nie istnieje", "NOT_FOUND", 404);
+  }
   revalidatePath("/ingredients");
 }
 
 export async function createCategoryAction(formData: FormData) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId } = await requireActiveHouseholdEditor();
   const parsed = categorySchema.safeParse({
     name: formData.get("name"),
     sortOrder: formData.get("sortOrder") || 0,
@@ -101,6 +215,65 @@ export async function createCategoryAction(formData: FormData) {
   }
 
   await createCategory(householdId, parsed.data.name, parsed.data.sortOrder);
+  revalidatePath("/ingredients");
+}
+
+export async function deleteCategoryAction(id: string) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  if (!(await deleteCategory(householdId, id))) {
+    throw new AppError("Kategoria nie istnieje", "NOT_FOUND", 404);
+  }
+  revalidatePath("/ingredients");
+}
+
+export async function updateCategoryAction(id: string, formData: FormData) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  const parsed = categorySchema.safeParse({
+    name: formData.get("name"),
+    sortOrder: formData.get("sortOrder") || 0,
+  });
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+  if (!(await updateCategory(householdId, id, parsed.data.name, parsed.data.sortOrder))) {
+    throw new AppError("Kategoria nie istnieje", "NOT_FOUND", 404);
+  }
+  revalidatePath("/ingredients");
+}
+
+export async function createTagAction(formData: FormData) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  const parsed = tagSchema.safeParse({
+    name: formData.get("name"),
+    type: formData.get("type"),
+  });
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+  await createTag(householdId, parsed.data.name, parsed.data.type);
+  revalidatePath("/ingredients");
+}
+
+export async function deleteTagAction(id: string) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  if (!(await deleteTag(householdId, id))) {
+    throw new AppError("Tag nie istnieje", "NOT_FOUND", 404);
+  }
+  revalidatePath("/ingredients");
+}
+
+export async function updateTagAction(id: string, formData: FormData) {
+  const { householdId } = await requireActiveHouseholdEditor();
+  const parsed = tagSchema.safeParse({
+    name: formData.get("name"),
+    type: formData.get("type"),
+  });
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+  if (!(await updateTag(householdId, id, parsed.data.name))) {
+    throw new AppError("Tag nie istnieje", "NOT_FOUND", 404);
+  }
   revalidatePath("/ingredients");
 }
 

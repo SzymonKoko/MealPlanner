@@ -18,7 +18,15 @@ export const moveMealPlanEntrySchema = z.object({
 export const assignmentSchema = z.object({
   mealPlanEntryId: z.string().uuid(),
   userId: z.string().uuid(),
+  servings: z.coerce.number().int().min(0),
+});
+
+export const mealPlanDetailsSchema = z.object({
+  entryId: z.string().uuid(),
   servings: z.coerce.number().int().min(1),
+  notes: z.string().max(500).optional(),
+  status: z.enum(["planned", "prepared", "eaten"]).default("planned"),
+  isBatchCooking: z.coerce.boolean().default(false),
 });
 
 export const copyWeekSchema = z.object({

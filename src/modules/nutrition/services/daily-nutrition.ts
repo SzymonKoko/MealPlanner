@@ -11,7 +11,7 @@ import { getRecipeWithIngredients } from "@/modules/recipes/repository/recipe-re
 import { getAssignmentsForEntry } from "@/modules/meal-planner/repository/meal-plan-repository";
 import { db } from "@/db/client";
 import { ingredients, products } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 export interface DailyNutritionResult {
   consumed: NutritionValues;
@@ -55,7 +55,13 @@ export async function calculateDailyNutritionForUser(
           const [ingredient] = await db
             .select()
             .from(ingredients)
-            .where(eq(ingredients.id, ri.ingredientId))
+            .where(
+              and(
+                eq(ingredients.id, ri.ingredientId),
+                eq(ingredients.householdId, householdId),
+                isNull(ingredients.deletedAt),
+              ),
+            )
             .limit(1);
           if (ingredient) {
             nutritionSource = { ...ingredient, baseUnit: ingredient.baseUnit };
@@ -64,7 +70,12 @@ export async function calculateDailyNutritionForUser(
           const [product] = await db
             .select()
             .from(products)
-            .where(eq(products.id, ri.productId))
+            .where(
+              and(
+                eq(products.id, ri.productId),
+                eq(products.householdId, householdId),
+              ),
+            )
             .limit(1);
           if (product) {
             nutritionSource = { ...product, baseUnit: product.packageUnit ?? "g" };

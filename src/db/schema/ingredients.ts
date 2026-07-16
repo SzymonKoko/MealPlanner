@@ -38,6 +38,8 @@ export const ingredients = pgTable("ingredients", {
   carbsPer100: text("carbs_per_100"),
   fatPer100: text("fat_per_100"),
   fiberPer100: text("fiber_per_100"),
+  densityGramsPerMl: text("density_grams_per_ml"),
+  allergens: text("allergens"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

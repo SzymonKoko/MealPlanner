@@ -8,12 +8,22 @@ import {
 } from "@/modules/households/repository/household-repository";
 import { getNutritionGoals } from "@/modules/nutrition/repository/nutrition-repository";
 import { saveNutritionGoalsAction } from "@/modules/nutrition/actions/nutrition-actions";
-import { inviteMember, createHousehold } from "@/modules/households/actions/household-actions";
+import {
+  inviteMember,
+  createHousehold,
+  renameHouseholdAction,
+  updateMemberRoleAction,
+  removeMemberAction,
+  revokeInviteAction,
+  leaveHouseholdAction,
+  transferOwnershipAction,
+} from "@/modules/households/actions/household-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import { PwaInstallButton } from "@/components/shared/pwa-install-button";
 
 export default async function MorePage() {
   const user = await requireAuth();
@@ -23,15 +33,19 @@ export default async function MorePage() {
   let invites: Awaited<ReturnType<typeof getHouseholdInvites>> = [];
   let goals = null;
   let activeHouseholdId: string | null = user.activeHouseholdId;
+  let activeRole: "owner" | "member" | "viewer" | null = null;
 
   if (activeHouseholdId) {
     try {
       const ctx = await requireActiveHousehold();
-      [members, invites, goals] = await Promise.all([
+      activeRole = ctx.role;
+      [members, goals] = await Promise.all([
         getHouseholdMembers(ctx.householdId),
-        getHouseholdInvites(ctx.householdId),
         getNutritionGoals(user.id),
       ]);
+      if (ctx.role === "owner") {
+        invites = await getHouseholdInvites(ctx.householdId);
+      }
     } catch {
       activeHouseholdId = null;
     }
@@ -49,25 +63,49 @@ export default async function MorePage() {
           <CardContent className="space-y-1 text-sm">
             <p>{user.displayName}</p>
             <p className="text-muted-foreground">{user.email}</p>
+            <div className="pt-3"><PwaInstallButton /></div>
           </CardContent>
         </Card>
 
-        {households.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Utwórz gospodarstwo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form action={createHousehold} className="flex gap-2">
-                <Input name="name" placeholder="Nazwa" required />
-                <Button type="submit">Utwórz</Button>
-              </form>
-            </CardContent>
-          </Card>
-        ) : null}
+        <Card>
+          <CardHeader><CardTitle>Utwórz kolejne gospodarstwo</CardTitle></CardHeader>
+          <CardContent>
+            <form action={createHousehold} className="flex gap-2">
+              <Input name="name" placeholder="Nazwa" required />
+              <Button type="submit">Utwórz</Button>
+            </form>
+          </CardContent>
+        </Card>
 
         {activeHouseholdId ? (
           <>
+            {activeRole === "owner" ? (
+              <Card>
+                <CardHeader><CardTitle>Ustawienia gospodarstwa</CardTitle></CardHeader>
+                <CardContent>
+                  <form action={renameHouseholdAction} className="flex gap-2">
+                    <input type="hidden" name="householdId" value={activeHouseholdId} />
+                    <Input
+                      name="name"
+                      defaultValue={households.find((item) => item.id === activeHouseholdId)?.name}
+                      required
+                    />
+                    <Button type="submit">Zmień nazwę</Button>
+                  </form>
+                </CardContent>
+              </Card>
+            ) : null}
+            {activeRole && activeRole !== "owner" ? (
+              <Card>
+                <CardHeader><CardTitle>Członkostwo</CardTitle></CardHeader>
+                <CardContent>
+                  <form action={leaveHouseholdAction}>
+                    <input type="hidden" name="householdId" value={activeHouseholdId} />
+                    <Button type="submit" variant="destructive">Opuść gospodarstwo</Button>
+                  </form>
+                </CardContent>
+              </Card>
+            ) : null}
             <Card>
               <CardHeader>
                 <CardTitle>Cele żywieniowe</CardTitle>
@@ -109,13 +147,37 @@ export default async function MorePage() {
                 {members.map((m) => (
                   <div key={m.userId} className="flex justify-between rounded-lg border p-3 text-sm">
                     <span>{m.displayName}</span>
-                    <span className="text-muted-foreground">{m.role}</span>
+                    {activeRole === "owner" && m.role !== "owner" ? (
+                      <div className="flex flex-wrap gap-2">
+                        <form action={updateMemberRoleAction} className="flex gap-2">
+                          <input type="hidden" name="householdId" value={activeHouseholdId} />
+                          <input type="hidden" name="userId" value={m.userId} />
+                          <select name="role" defaultValue={m.role} className="h-11 rounded-lg border bg-background px-2">
+                            <option value="member">member</option>
+                            <option value="viewer">viewer</option>
+                          </select>
+                          <Button type="submit" size="sm">Zapisz</Button>
+                        </form>
+                        <form action={removeMemberAction}>
+                          <input type="hidden" name="householdId" value={activeHouseholdId} />
+                          <input type="hidden" name="userId" value={m.userId} />
+                          <Button type="submit" size="sm" variant="ghost" className="text-destructive">Usuń</Button>
+                        </form>
+                      <form action={transferOwnershipAction}>
+                        <input type="hidden" name="householdId" value={activeHouseholdId} />
+                        <input type="hidden" name="userId" value={m.userId} />
+                        <Button type="submit" size="sm" variant="outline">Przekaż własność</Button>
+                      </form>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">{m.role}</span>
+                    )}
                   </div>
                 ))}
               </CardContent>
             </Card>
 
-            <Card>
+            {activeRole === "owner" ? <Card>
               <CardHeader>
                 <CardTitle>Zaproś członka</CardTitle>
               </CardHeader>
@@ -133,17 +195,24 @@ export default async function MorePage() {
                   <div className="mt-4 space-y-2">
                     <p className="text-sm font-medium">Aktywne zaproszenia</p>
                     {invites.map((inv) => (
-                      <p key={inv.id} className="text-sm text-muted-foreground">
-                        <Link href={`/invite/${inv.token}`} className="underline">
-                          Link zaproszenia
-                        </Link>{" "}
-                        ({inv.role}) — ważne do {inv.expiresAt.toLocaleDateString("pl-PL")}
-                      </p>
+                      <div key={inv.id} className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                        <span>
+                          <Link href={`/invite/${inv.token}`} className="break-all underline">
+                            {`${process.env.APP_URL ?? ""}/invite/${inv.token}`}
+                          </Link>{" "}
+                          ({inv.role}) — ważne do {inv.expiresAt.toLocaleDateString("pl-PL")}
+                        </span>
+                        <form action={revokeInviteAction}>
+                          <input type="hidden" name="householdId" value={activeHouseholdId} />
+                          <input type="hidden" name="inviteId" value={inv.id} />
+                          <Button type="submit" size="sm" variant="ghost">Unieważnij</Button>
+                        </form>
+                      </div>
                     ))}
                   </div>
                 ) : null}
               </CardContent>
-            </Card>
+            </Card> : null}
           </>
         ) : null}
 

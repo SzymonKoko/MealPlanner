@@ -1,36 +1,63 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { DashboardShell } from "@/components/shared/dashboard-shell";
-import { requireActiveHousehold } from "@/server/require-household-member";
+import { requireActiveHouseholdOrRedirect } from "@/server/require-household-member";
 import { getRecipeWithIngredients } from "@/modules/recipes/repository/recipe-repository";
-import { getRecipeNutritionAction } from "@/modules/recipes/actions/recipe-actions";
+import {
+  deleteRecipeFormAction,
+  getRecipeNutritionAction,
+} from "@/modules/recipes/actions/recipe-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { canEdit } from "@/modules/households/services/role-checks";
+import { ScaledIngredientList } from "@/modules/recipes/components/scaled-ingredient-list";
 
 interface RecipeDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
 export default async function RecipeDetailPage({ params }: RecipeDetailPageProps) {
-  const { householdId } = await requireActiveHousehold();
+  const { householdId, role } = await requireActiveHouseholdOrRedirect();
   const { id } = await params;
 
-  const [data, nutrition] = await Promise.all([
-    getRecipeWithIngredients(householdId, id),
-    getRecipeNutritionAction(id),
-  ]);
-
+  const data = await getRecipeWithIngredients(householdId, id);
   if (!data) notFound();
+  const nutrition = await getRecipeNutritionAction(id);
+  const editable = canEdit(role);
 
   return (
     <DashboardShell>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">{data.recipe.name}</h1>
-          <Button variant="outline" asChild>
-            <Link href="/recipes">Powrót</Link>
-          </Button>
+          <div className="flex gap-2">
+            {editable ? (
+              <>
+                <Button variant="outline" asChild>
+                  <Link href={`/recipes/${id}/edit`}>Edytuj</Link>
+                </Button>
+                <form action={deleteRecipeFormAction}>
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit" variant="ghost" className="text-destructive">Usuń</Button>
+                </form>
+              </>
+            ) : null}
+            <Button variant="outline" asChild><Link href="/recipes">Powrót</Link></Button>
+          </div>
         </div>
+
+        {data.recipe.imageUrl ? (
+          <Image
+            src={data.recipe.imageUrl}
+            alt=""
+            width={1200}
+            height={600}
+            unoptimized
+            className="max-h-80 w-full rounded-xl object-cover"
+          />
+        ) : null}
+        {data.recipe.description ? <p className="text-muted-foreground">{data.recipe.description}</p> : null}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Card>
@@ -63,17 +90,19 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
             <CardTitle>Składniki</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
-              {data.ingredients.map((ri) => (
-                <li key={ri.id} className="text-sm">
-                  {ri.quantity} {ri.unit}{" "}
-                  {"name" in (ri.source ?? {})
-                    ? (ri.source as { name: string }).name
-                    : "Składnik"}
-                  {ri.optional ? " (opcjonalny)" : ""}
-                </li>
-              ))}
-            </ul>
+            <ScaledIngredientList
+              baseServings={data.recipe.servings}
+              ingredients={data.ingredients.map((item) => ({
+                id: item.id,
+                name:
+                  "name" in (item.source ?? {})
+                    ? (item.source as { name: string }).name
+                    : "Brakujący składnik",
+                quantity: item.quantity,
+                unit: item.unit,
+                optional: item.optional,
+              }))}
+            />
           </CardContent>
         </Card>
 

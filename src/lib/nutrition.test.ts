@@ -55,6 +55,11 @@ describe("units", () => {
       unit: "g",
     });
   });
+
+  it("converts volume to mass when density is known", () => {
+    expect(convertToBaseUnit(100, "ml", "g", 1.2)).toBe(120);
+    expect(convertToBaseUnit(100, "ml", "g")).toBeNull();
+  });
 });
 
 describe("recipe nutrition calculator", () => {

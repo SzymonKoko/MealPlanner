@@ -30,11 +30,48 @@ services:
       - /bin/sh
       - -c
       - |
-        set -e
+        set -eu
+        psql -v ON_ERROR_STOP=1 -c '
+          CREATE TABLE IF NOT EXISTS schema_migrations (
+            filename text PRIMARY KEY,
+            checksum text,
+            applied_at timestamptz NOT NULL DEFAULT now()
+          );
+          ALTER TABLE schema_migrations
+            ADD COLUMN IF NOT EXISTS checksum text'
+        script=/tmp/run-migrations.sql
+        printf "SELECT pg_advisory_xact_lock(hashtext('mealplanner-migrations'));\n" > "$$script"
         for migration in /migrations/*.sql; do
-          echo "Applying $$migration"
-          psql -v ON_ERROR_STOP=1 -f "$$migration"
+          filename="$$(basename "$$migration")"
+          case "$$filename" in
+            *[!a-zA-Z0-9._-]*) echo "Invalid migration filename: $$filename" >&2; exit 1 ;;
+          esac
+          checksum="$$(sha256sum "$$migration" | awk '{print $$1}')"
+          cat >> "$$script" <<SQL
+        SELECT COALESCE((
+          SELECT checksum IS NOT DISTINCT FROM '$$checksum'
+          FROM schema_migrations
+          WHERE filename = '$$filename'
+        ), true) AS checksum_ok \gset
+        \if :checksum_ok
+        \else
+        \echo Checksum mismatch for migration $$filename
+        \quit 1
+        \endif
+        SELECT NOT EXISTS (
+          SELECT 1 FROM schema_migrations WHERE filename = '$$filename'
+        ) AS apply_migration \gset
+        \if :apply_migration
+        \echo Applying $$filename
+        \i $$migration
+        INSERT INTO schema_migrations (filename, checksum)
+        VALUES ('$$filename', '$$checksum');
+        \else
+        \echo Skipping already applied $$filename
+        \endif
+        SQL
         done
+        psql -v ON_ERROR_STOP=1 --single-transaction -f "$$script"
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,12 +119,29 @@ services:
       PGDATABASE: mealplanner
     volumes:
       - backup_data:/backups
-    entrypoint: |
-      /bin/sh -c 'while true; do
-        pg_dump -Fc > /backups/mealplanner-$$(date +%Y%m%d-%H%M%S).dump;
-        find /backups -name "*.dump" -mtime +7 -delete;
-        sleep 86400;
-      done'
+      - uploads_data:/uploads:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        while true; do
+          target="/backups/mealplanner-$$(date +%Y%m%d-%H%M%S).dump"
+          temporary="$$target.tmp"
+          pg_dump -Fc > "$$temporary"
+          pg_restore --list "$$temporary" >/dev/null
+          mv "$$temporary" "$$target"
+          tar -czf "/backups/uploads-$$(date +%Y%m%d-%H%M%S).tar.gz" -C /uploads .
+          find /backups -name "*.dump" -mtime +7 -delete
+          find /backups -name "uploads-*.tar.gz" -mtime +7 -delete
+          sleep 86400
+        done
+    healthcheck:
+      test: ["CMD-SHELL", "latest=$$(ls -1t /backups/*.dump 2>/dev/null | sed -n '1p'); test -n \"$$latest\" && test $$(find \"$$latest\" -mmin -1500 | wc -l) -eq 1 && pg_restore --list \"$$latest\" >/dev/null"]
+      interval: 1h
+      timeout: 30s
+      retries: 2
+      start_period: 5m
     depends_on:
       postgres:
         condition: service_healthy

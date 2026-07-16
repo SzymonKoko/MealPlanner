@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
+import { requireActiveHousehold } from "@/server/require-household-member";
+import { db } from "@/db/client";
+import { recipes } from "@/db/schema";
+import { and, eq, isNull } from "drizzle-orm";
 
 export async function GET(
   _request: NextRequest,
@@ -14,6 +18,23 @@ export async function GET(
   }
 
   try {
+    const { householdId } = await requireActiveHousehold();
+    const imageUrl = `/api/uploads/${safeName}`;
+    const [recipe] = await db
+      .select({ id: recipes.id })
+      .from(recipes)
+      .where(
+        and(
+          eq(recipes.householdId, householdId),
+          eq(recipes.imageUrl, imageUrl),
+          isNull(recipes.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!recipe) {
+      return NextResponse.json({ error: "Nie znaleziono" }, { status: 404 });
+    }
+
     const uploadDir = process.env.UPLOAD_DIR ?? "./uploads";
     const filepath = path.join(uploadDir, safeName);
     const buffer = await readFile(filepath);

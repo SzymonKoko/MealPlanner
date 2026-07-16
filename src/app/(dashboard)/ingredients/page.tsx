@@ -1,99 +1,406 @@
 import { DashboardShell } from "@/components/shared/dashboard-shell";
-import { requireActiveHousehold } from "@/server/require-household-member";
+import { requireActiveHouseholdOrRedirect } from "@/server/require-household-member";
 import {
   listIngredients,
   listProducts,
+  listCategories,
+  listTags,
+  getIngredientTags,
+  getProductTags,
 } from "@/modules/ingredients/repository/ingredient-repository";
 import {
   createIngredientAction,
   createProductAction,
-  deleteIngredientFormAction,
+  updateIngredientAction,
+  deleteIngredientAction,
+  updateProductAction,
+  deleteProductAction,
+  createCategoryAction,
+  deleteCategoryAction,
+  createTagAction,
+  deleteTagAction,
+  updateCategoryAction,
+  updateTagAction,
 } from "@/modules/ingredients/actions/ingredient-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SUPPORTED_UNITS } from "@/lib/units";
+import { canEdit } from "@/modules/households/services/role-checks";
 
-export default async function IngredientsPage() {
-  const { householdId } = await requireActiveHousehold();
-  const [ingredients, products] = await Promise.all([
+type Ingredient = Awaited<ReturnType<typeof listIngredients>>[number];
+type Product = Awaited<ReturnType<typeof listProducts>>[number];
+type Category = Awaited<ReturnType<typeof listCategories>>[number];
+type Tag = Awaited<ReturnType<typeof listTags>>[number];
+type FormAction = (formData: FormData) => Promise<void>;
+
+function NutritionFields({
+  values,
+  prefix,
+}: {
+  values?: Pick<
+    Ingredient | Product,
+    "kcalPer100" | "proteinPer100" | "carbsPer100" | "fatPer100" | "fiberPer100"
+  >;
+  prefix: string;
+}) {
+  const fields = [
+    ["kcalPer100", "kcal"],
+    ["proteinPer100", "Białko"],
+    ["carbsPer100", "Węglowodany"],
+    ["fatPer100", "Tłuszcze"],
+    ["fiberPer100", "Błonnik"],
+  ] as const;
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      {fields.map(([name, label]) => (
+        <div className="space-y-2" key={name}>
+          <Label htmlFor={`${prefix}-${name}`}>{label}/100</Label>
+          <Input
+            id={`${prefix}-${name}`}
+            name={name}
+            type="number"
+            min="0"
+            step="0.1"
+            defaultValue={values?.[name] ?? ""}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IngredientForm({
+  action,
+  ingredient,
+  categories,
+  tags,
+  selectedTagIds = new Set<string>(),
+  submitLabel,
+}: {
+  action: FormAction;
+  ingredient?: Ingredient;
+  categories: Category[];
+  tags: Tag[];
+  selectedTagIds?: Set<string>;
+  submitLabel: string;
+}) {
+  const prefix = ingredient?.id ?? "new-ingredient";
+  return (
+    <form action={action} className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-name`}>Nazwa</Label>
+          <Input id={`${prefix}-name`} name="name" defaultValue={ingredient?.name} required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-category`}>Kategoria</Label>
+          <select
+            id={`${prefix}-category`}
+            name="categoryId"
+            defaultValue={ingredient?.categoryId ?? ""}
+            className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Bez kategorii</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>{category.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${prefix}-description`}>Opis</Label>
+        <Input id={`${prefix}-description`} name="description" defaultValue={ingredient?.description ?? ""} />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${prefix}-unit`}>Jednostka bazowa</Label>
+        <select
+          id={`${prefix}-unit`}
+          name="baseUnit"
+          defaultValue={ingredient?.baseUnit ?? "g"}
+          className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+        >
+          {SUPPORTED_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+        </select>
+      </div>
+      <NutritionFields values={ingredient} prefix={prefix} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-density`}>Gęstość (g/ml, opcjonalnie)</Label>
+          <Input
+            id={`${prefix}-density`}
+            name="densityGramsPerMl"
+            type="number"
+            min="0.001"
+            step="0.001"
+            defaultValue={ingredient?.densityGramsPerMl ?? ""}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-allergens`}>Alergeny</Label>
+          <Input
+            id={`${prefix}-allergens`}
+            name="allergens"
+            defaultValue={ingredient?.allergens ?? ""}
+            placeholder="np. gluten, orzechy"
+          />
+        </div>
+      </div>
+      {tags.length ? (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Tagi</legend>
+          <div className="flex flex-wrap gap-3">
+            {tags.map((tag) => (
+              <label key={tag.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="tagIds"
+                  value={tag.id}
+                  defaultChecked={selectedTagIds.has(tag.id)}
+                />
+                {tag.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+      <Button type="submit">{submitLabel}</Button>
+    </form>
+  );
+}
+
+function ProductForm({
+  action,
+  product,
+  ingredients,
+  tags,
+  selectedTagIds = new Set<string>(),
+  submitLabel,
+}: {
+  action: FormAction;
+  product?: Product;
+  ingredients: Ingredient[];
+  tags: Tag[];
+  selectedTagIds?: Set<string>;
+  submitLabel: string;
+}) {
+  const prefix = product?.id ?? "new-product";
+  return (
+    <form action={action} className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-name`}>Nazwa</Label>
+          <Input id={`${prefix}-name`} name="name" defaultValue={product?.name} required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-brand`}>Marka</Label>
+          <Input id={`${prefix}-brand`} name="brand" defaultValue={product?.brand ?? ""} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-barcode`}>Kod kreskowy</Label>
+          <Input id={`${prefix}-barcode`} name="barcode" defaultValue={product?.barcode ?? ""} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-ingredient`}>Powiązany składnik</Label>
+          <select
+            id={`${prefix}-ingredient`}
+            name="ingredientId"
+            defaultValue={product?.ingredientId ?? ""}
+            className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Brak</option>
+            {ingredients.map((ingredient) => (
+              <option key={ingredient.id} value={ingredient.id}>{ingredient.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-quantity`}>Wielkość opakowania</Label>
+          <Input id={`${prefix}-quantity`} name="packageQuantity" type="number" min="0" step="0.01" defaultValue={product?.packageQuantity ?? ""} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-unit`}>Jednostka opakowania</Label>
+          <select
+            id={`${prefix}-unit`}
+            name="packageUnit"
+            defaultValue={product?.packageUnit ?? "g"}
+            className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            {SUPPORTED_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+          </select>
+        </div>
+      </div>
+      <NutritionFields values={product} prefix={prefix} />
+      {tags.length ? (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Tagi</legend>
+          <div className="flex flex-wrap gap-3">
+            {tags.map((tag) => (
+              <label key={tag.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="tagIds"
+                  value={tag.id}
+                  defaultChecked={selectedTagIds.has(tag.id)}
+                />
+                {tag.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
+      <Button type="submit">{submitLabel}</Button>
+    </form>
+  );
+}
+
+interface IngredientsPageProps {
+  searchParams: Promise<{ q?: string; category?: string; tag?: string }>;
+}
+
+export default async function IngredientsPage({ searchParams }: IngredientsPageProps) {
+  const { householdId, role } = await requireActiveHouseholdOrRedirect();
+  const { q = "", category = "", tag = "" } = await searchParams;
+  const search = q.trim();
+  const [listedIngredients, products, categories, tags, allTags, allIngredients] = await Promise.all([
+    listIngredients(householdId, search || undefined, category || undefined),
+    listProducts(householdId, search || undefined),
+    listCategories(householdId),
+    listTags(householdId, "ingredient"),
+    listTags(householdId),
     listIngredients(householdId),
-    listProducts(householdId),
   ]);
+  const ingredientTags = await getIngredientTags(listedIngredients.map((ingredient) => ingredient.id));
+  const productTagRelations = await getProductTags(products.map((product) => product.id));
+  const tagIdsByIngredient = new Map<string, Set<string>>();
+  for (const relation of ingredientTags) {
+    const current = tagIdsByIngredient.get(relation.ingredientId) ?? new Set<string>();
+    current.add(relation.tagId);
+    tagIdsByIngredient.set(relation.ingredientId, current);
+  }
+  const ingredients = tag
+    ? listedIngredients.filter((ingredient) => tagIdsByIngredient.get(ingredient.id)?.has(tag))
+    : listedIngredients;
+  const tagIdsByProduct = new Map<string, Set<string>>();
+  for (const relation of productTagRelations) {
+    const current = tagIdsByProduct.get(relation.productId) ?? new Set<string>();
+    current.add(relation.tagId);
+    tagIdsByProduct.set(relation.productId, current);
+  }
+  const productTagOptions = allTags.filter((tag) => tag.type === "product");
+  const editable = canEdit(role);
 
   return (
     <DashboardShell>
       <div className="space-y-8">
         <h1 className="text-2xl font-bold">Składniki i produkty</h1>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Dodaj składnik</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form action={createIngredientAction} className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="ing-name">Nazwa</Label>
-                  <Input id="ing-name" name="name" required />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="kcal">kcal/100</Label>
-                    <Input id="kcal" name="kcalPer100" type="number" step="0.1" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="protein">Białko/100</Label>
-                    <Input id="protein" name="proteinPer100" type="number" step="0.1" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="carbs">Węgle/100</Label>
-                    <Input id="carbs" name="carbsPer100" type="number" step="0.1" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="fat">Tłuszcze/100</Label>
-                    <Input id="fat" name="fatPer100" type="number" step="0.1" />
-                  </div>
-                </div>
-                <Button type="submit">Dodaj składnik</Button>
-              </form>
-            </CardContent>
-          </Card>
+        <form className="grid gap-2 sm:grid-cols-[1fr_13rem_13rem_auto]" method="get">
+          <Input name="q" defaultValue={search} placeholder="Szukaj składników i produktów" />
+          <select
+            name="category"
+            defaultValue={category}
+            className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Wszystkie kategorie</option>
+            {categories.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+          <select
+            name="tag"
+            defaultValue={tag}
+            className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Wszystkie tagi</option>
+            {tags.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+          <Button type="submit" variant="secondary">Szukaj</Button>
+        </form>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Dodaj produkt</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form action={createProductAction} className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="prod-name">Nazwa</Label>
-                  <Input id="prod-name" name="name" required />
+        {!editable ? (
+          <p className="rounded-lg border p-3 text-sm text-muted-foreground">
+            Masz dostęp tylko do odczytu.
+          </p>
+        ) : (
+          <>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <CardHeader><CardTitle>Dodaj składnik</CardTitle></CardHeader>
+                <CardContent>
+                  <IngredientForm
+                    action={createIngredientAction}
+                    categories={categories}
+                    tags={tags}
+                    submitLabel="Dodaj składnik"
+                  />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle>Dodaj produkt</CardTitle></CardHeader>
+                <CardContent>
+                  <ProductForm
+                    action={createProductAction}
+                    ingredients={allIngredients}
+                    tags={productTagOptions}
+                    submitLabel="Dodaj produkt"
+                  />
+                </CardContent>
+              </Card>
+            </div>
+            <Card>
+              <CardHeader><CardTitle>Kategorie i tagi</CardTitle></CardHeader>
+              <CardContent className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-3">
+                  <form action={createCategoryAction} className="flex gap-2">
+                    <Input name="name" placeholder="Nowa kategoria" required />
+                    <Button type="submit">Dodaj</Button>
+                  </form>
+                  {categories.map((category) => (
+                    <details key={category.id}>
+                      <summary className="cursor-pointer">{category.name}</summary>
+                      <form action={updateCategoryAction.bind(null, category.id)} className="mt-2 flex gap-2">
+                        <Input name="name" defaultValue={category.name} required />
+                        <Input name="sortOrder" type="number" defaultValue={category.sortOrder} className="w-24" aria-label="Kolejność" />
+                        <Button type="submit" size="sm">Zapisz</Button>
+                        <Button formAction={deleteCategoryAction.bind(null, category.id)} type="submit" variant="ghost" size="sm">Usuń</Button>
+                      </form>
+                    </details>
+                  ))}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="brand">Marka</Label>
-                  <Input id="brand" name="brand" />
+                <div className="space-y-3">
+                  <form action={createTagAction} className="grid gap-2 sm:grid-cols-[1fr_9rem_auto]">
+                    <Input name="name" placeholder="Nowy tag" required />
+                    <select
+                      name="type"
+                      defaultValue="ingredient"
+                      className="flex h-11 rounded-lg border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="ingredient">Składnik</option>
+                      <option value="product">Produkt</option>
+                      <option value="recipe">Przepis</option>
+                    </select>
+                    <Button type="submit">Dodaj</Button>
+                  </form>
+                  {allTags.map((tag) => (
+                    <details key={tag.id}>
+                      <summary className="cursor-pointer">{tag.name} <span className="text-xs text-muted-foreground">({tag.type})</span></summary>
+                      <form action={updateTagAction.bind(null, tag.id)} className="mt-2 flex gap-2">
+                        <Input name="name" defaultValue={tag.name} required />
+                        <input type="hidden" name="type" value={tag.type} />
+                        <Button type="submit" size="sm">Zapisz</Button>
+                        <Button formAction={deleteTagAction.bind(null, tag.id)} type="submit" variant="ghost" size="sm">Usuń</Button>
+                      </form>
+                    </details>
+                  ))}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ingredientId">Powiązany składnik</Label>
-                  <select
-                    id="ingredientId"
-                    name="ingredientId"
-                    className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="">— brak —</option>
-                    {ingredients.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <Button type="submit">Dodaj produkt</Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
 
         <Card>
           <CardHeader>
@@ -104,19 +411,35 @@ export default async function IngredientsPage() {
               <p className="text-muted-foreground">Brak składników.</p>
             ) : (
               ingredients.map((ing) => (
-                <div key={ing.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
+                <div key={ing.id} className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
                     <p className="font-medium">{ing.name}</p>
                     <p className="text-sm text-muted-foreground">
                       {ing.kcalPer100 ? `${ing.kcalPer100} kcal/100${ing.baseUnit}` : "Brak makro"}
                     </p>
+                    </div>
+                    {editable ? (
+                      <form action={deleteIngredientAction.bind(null, ing.id)}>
+                        <Button type="submit" variant="ghost" size="sm" className="text-destructive">Usuń</Button>
+                      </form>
+                    ) : null}
                   </div>
-                  <form action={deleteIngredientFormAction}>
-                    <input type="hidden" name="id" value={ing.id} />
-                    <Button type="submit" variant="ghost" size="sm" className="text-destructive">
-                      Usuń
-                    </Button>
-                  </form>
+                  {editable ? (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-sm font-medium">Edytuj</summary>
+                      <div className="mt-3">
+                        <IngredientForm
+                          action={updateIngredientAction.bind(null, ing.id)}
+                          ingredient={ing}
+                          categories={categories}
+                          tags={tags}
+                          selectedTagIds={tagIdsByIngredient.get(ing.id)}
+                          submitLabel="Zapisz zmiany"
+                        />
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               ))
             )}
@@ -133,8 +456,32 @@ export default async function IngredientsPage() {
             ) : (
               products.map((prod) => (
                 <div key={prod.id} className="rounded-lg border p-3">
-                  <p className="font-medium">{prod.name}</p>
-                  {prod.brand ? <p className="text-sm text-muted-foreground">{prod.brand}</p> : null}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{prod.name}</p>
+                      {prod.brand ? <p className="text-sm text-muted-foreground">{prod.brand}</p> : null}
+                    </div>
+                    {editable ? (
+                      <form action={deleteProductAction.bind(null, prod.id)}>
+                        <Button type="submit" variant="ghost" size="sm" className="text-destructive">Usuń</Button>
+                      </form>
+                    ) : null}
+                  </div>
+                  {editable ? (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-sm font-medium">Edytuj</summary>
+                      <div className="mt-3">
+                        <ProductForm
+                          action={updateProductAction.bind(null, prod.id)}
+                          product={prod}
+                          ingredients={allIngredients}
+                          tags={productTagOptions}
+                          selectedTagIds={tagIdsByProduct.get(prod.id)}
+                          submitLabel="Zapisz zmiany"
+                        />
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               ))
             )}

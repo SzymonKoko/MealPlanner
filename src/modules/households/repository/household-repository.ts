@@ -1,7 +1,7 @@
 import { db } from "@/db/client";
 import { households, householdMembers, householdInvites, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import type { HouseholdRole } from "@/db/schema/households";
+import type { HouseholdRole, InviteRole } from "@/db/schema/households";
 
 export async function listUserHouseholds(userId: string) {
   return db
@@ -64,7 +64,7 @@ export async function createInvite(
   invitedBy: string,
   token: string,
   expiresAt: Date,
-  role: HouseholdRole,
+  role: InviteRole,
   email?: string,
 ) {
   const [invite] = await db
@@ -83,9 +83,28 @@ export async function getInviteByToken(token: string) {
   return invite ?? null;
 }
 
-export async function acceptInviteRecord(inviteId: string, householdId: string, userId: string, role: HouseholdRole) {
+export async function getInvitePreview(token: string) {
+  const [invite] = await db
+    .select({
+      householdName: households.name,
+      role: householdInvites.role,
+      expiresAt: householdInvites.expiresAt,
+    })
+    .from(householdInvites)
+    .innerJoin(households, eq(householdInvites.householdId, households.id))
+    .where(eq(householdInvites.token, token))
+    .limit(1);
+  return invite ?? null;
+}
+
+export async function acceptInviteRecord(inviteId: string, householdId: string, userId: string, role: InviteRole) {
   return db.transaction(async (tx) => {
-    await tx.insert(householdMembers).values({ householdId, userId, role });
+    await tx
+      .insert(householdMembers)
+      .values({ householdId, userId, role })
+      .onConflictDoNothing({
+        target: [householdMembers.householdId, householdMembers.userId],
+      });
     await tx.delete(householdInvites).where(eq(householdInvites.id, inviteId));
     await tx
       .update(users)
@@ -105,4 +124,98 @@ export async function getMembership(householdId: string, userId: string) {
     .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)))
     .limit(1);
   return membership ?? null;
+}
+
+export async function renameHousehold(householdId: string, name: string) {
+  const [household] = await db
+    .update(households)
+    .set({ name, updatedAt: new Date() })
+    .where(eq(households.id, householdId))
+    .returning();
+  return household ?? null;
+}
+
+export async function updateMembershipRole(
+  householdId: string,
+  userId: string,
+  role: Exclude<HouseholdRole, "owner">,
+) {
+  const [membership] = await db
+    .update(householdMembers)
+    .set({ role })
+    .where(
+      and(
+        eq(householdMembers.householdId, householdId),
+        eq(householdMembers.userId, userId),
+      ),
+    )
+    .returning();
+  return membership ?? null;
+}
+
+export async function removeHouseholdMember(householdId: string, userId: string) {
+  return db.transaction(async (tx) => {
+    const [membership] = await tx
+      .delete(householdMembers)
+      .where(
+        and(
+          eq(householdMembers.householdId, householdId),
+          eq(householdMembers.userId, userId),
+        ),
+      )
+      .returning();
+    if (!membership) return null;
+    await tx
+      .update(users)
+      .set({ activeHouseholdId: null, updatedAt: new Date() })
+      .where(and(eq(users.id, userId), eq(users.activeHouseholdId, householdId)));
+    return membership;
+  });
+}
+
+export async function transferHouseholdOwnership(
+  householdId: string,
+  currentOwnerId: string,
+  newOwnerId: string,
+) {
+  return db.transaction(async (tx) => {
+    await tx
+      .update(householdMembers)
+      .set({ role: "member" })
+      .where(
+        and(
+          eq(householdMembers.householdId, householdId),
+          eq(householdMembers.userId, currentOwnerId),
+        ),
+      );
+    const [newOwner] = await tx
+      .update(householdMembers)
+      .set({ role: "owner" })
+      .where(
+        and(
+          eq(householdMembers.householdId, householdId),
+          eq(householdMembers.userId, newOwnerId),
+        ),
+      )
+      .returning();
+    if (!newOwner) throw new Error("New owner is not a household member");
+    await tx
+      .update(households)
+      .set({ ownerId: newOwnerId, updatedAt: new Date() })
+      .where(eq(households.id, householdId));
+    return newOwner;
+  });
+}
+
+export async function revokeInvite(householdId: string, inviteId: string) {
+  const [invite] = await db
+    .delete(householdInvites)
+    .where(
+      and(
+        eq(householdInvites.id, inviteId),
+        eq(householdInvites.householdId, householdId),
+      ),
+    )
+    .returning();
+  return invite ?? null;
 }

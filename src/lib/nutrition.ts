@@ -14,6 +14,7 @@ export interface NutritionPer100 {
   carbsPer100?: string | null;
   fatPer100?: string | null;
   fiberPer100?: string | null;
+  densityGramsPerMl?: string | null;
 }
 
 export function parseDecimal(value?: string | null): number {
@@ -28,7 +29,12 @@ export function calculateNutritionForQuantity(
   unit: string,
   baseUnit: string,
 ): NutritionValues {
-  const baseQuantity = convertToBaseUnit(quantity, unit, baseUnit);
+  const baseQuantity = convertToBaseUnit(
+    quantity,
+    unit,
+    baseUnit,
+    parseDecimal(nutrition.densityGramsPerMl),
+  );
   if (baseQuantity === null) {
     return { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
   }

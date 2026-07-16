@@ -9,7 +9,12 @@ const TO_GRAMS: Record<SupportedUnit, number | null> = {
   szt: null,
 };
 
-export function convertToBaseUnit(quantity: number, unit: string, baseUnit: string): number | null {
+export function convertToBaseUnit(
+  quantity: number,
+  unit: string,
+  baseUnit: string,
+  densityGramsPerMl?: number | null,
+): number | null {
   const from = unit as SupportedUnit;
   const to = baseUnit as SupportedUnit;
 
@@ -18,10 +23,25 @@ export function convertToBaseUnit(quantity: number, unit: string, baseUnit: stri
   const fromFactor = TO_GRAMS[from];
   const toFactor = TO_GRAMS[to];
 
-  if (fromFactor === null || toFactor === null) return null;
+  if (fromFactor == null || toFactor == null) return null;
 
-  if ((from === "g" || from === "kg") && (to === "ml" || to === "l")) return null;
-  if ((from === "ml" || from === "l") && (to === "g" || to === "kg")) return null;
+  const fromIsMass = from === "g" || from === "kg";
+  const toIsMass = to === "g" || to === "kg";
+  const fromIsVolume = from === "ml" || from === "l";
+  const toIsVolume = to === "ml" || to === "l";
+
+  if (fromIsMass && toIsVolume) {
+    if (!densityGramsPerMl || densityGramsPerMl <= 0) return null;
+    const grams = quantity * fromFactor;
+    const milliliters = grams / densityGramsPerMl;
+    return milliliters / toFactor;
+  }
+  if (fromIsVolume && toIsMass) {
+    if (!densityGramsPerMl || densityGramsPerMl <= 0) return null;
+    const milliliters = quantity * fromFactor;
+    const grams = milliliters * densityGramsPerMl;
+    return grams / toFactor;
+  }
 
   return (quantity * fromFactor) / toFactor;
 }

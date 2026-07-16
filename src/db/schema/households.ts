@@ -3,6 +3,8 @@ import { users } from "./users";
 
 export const householdRoleEnum = ["owner", "member", "viewer"] as const;
 export type HouseholdRole = (typeof householdRoleEnum)[number];
+export const inviteRoleEnum = ["member", "viewer"] as const;
+export type InviteRole = (typeof inviteRoleEnum)[number];
 
 export const households = pgTable("households", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -36,7 +38,7 @@ export const householdInvites = pgTable("household_invites", {
     .notNull()
     .references(() => households.id, { onDelete: "cascade" }),
   email: text("email"),
-  role: text("role").notNull().$type<HouseholdRole>().default("member"),
+  role: text("role").notNull().$type<InviteRole>().default("member"),
   token: text("token").notNull().unique(),
   invitedBy: uuid("invited_by")
     .notNull()
