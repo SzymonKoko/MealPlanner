@@ -10,7 +10,7 @@ export async function AppHeader() {
 
   return (
     <header className="z-40 shrink-0 border-b bg-background/95 backdrop-blur">
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 px-4 py-3">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
         <Link href="/today" className="shrink-0 text-lg font-semibold">
           MealPlanner
         </Link>

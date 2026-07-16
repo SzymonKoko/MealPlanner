@@ -256,8 +256,8 @@ export function UsdaIngredientImportFlow({
                   <option value="ml">ml</option>
                 </select>
               </div>
-              <p className="text-sm font-medium text-muted-foreground">Wartości na 100 g</p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <p className="text-sm font-medium text-muted-foreground">Makro (na 100 g)</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
                 {(
                   [
                     ["kcalPer100", "kcal", selected.kcalPer100],
@@ -268,11 +268,11 @@ export function UsdaIngredientImportFlow({
                     ["saltPer100", "Sól", selected.saltPer100],
                   ] as Array<[string, string, string | null]>
                 ).map(([name, label, value]) => (
-                  <div className="flex min-w-0 flex-col gap-2" key={name}>
-                    <Label htmlFor={name} className="min-h-10 leading-tight">
+                  <div className="flex min-w-0 flex-col gap-1" key={name}>
+                    <Label htmlFor={name} className="leading-tight">
                       {label}
                     </Label>
-                    <Input id={name} name={name} defaultValue={value ?? ""} inputMode="decimal" />
+                    <Input id={name} name={name} className="h-10" defaultValue={value ?? ""} inputMode="decimal" />
                   </div>
                 ))}
               </div>

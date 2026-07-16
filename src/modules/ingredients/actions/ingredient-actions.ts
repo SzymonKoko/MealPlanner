@@ -334,6 +334,16 @@ export async function searchIngredientsAction(query: string) {
   return listIngredients(householdId, query);
 }
 
+/** Unified create: barcode present → product, otherwise → ingredient. */
+export async function createCatalogItemAction(formData: FormData) {
+  const barcode = String(formData.get("barcode") ?? "").trim();
+  if (barcode) {
+    await createProductAction(formData);
+    return;
+  }
+  await createIngredientAction(formData);
+}
+
 function parseIngredientConversions(formData: FormData) {
   const units = formData.getAll("conversionUnit");
   const grams = formData.getAll("conversionGrams");
