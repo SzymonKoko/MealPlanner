@@ -36,6 +36,7 @@ git -C "$SEED" push -u origin main >/dev/null 2>&1
 git --git-dir="$ORIGIN" symbolic-ref HEAD refs/heads/main
 
 git clone "$ORIGIN" "$WORK" >/dev/null 2>&1
+printf "local watcher log\n" > "$WORK/watch-deploy.log"
 
 printf "version-two\n" > "$SEED/app.txt"
 git -C "$SEED" add app.txt
@@ -46,6 +47,7 @@ WATCH_REPO_DIR="$WORK" \
 WATCH_ONCE=1 \
 WATCH_INTERVAL_SECONDS=1 \
 WATCH_DEPLOY_COMMAND="sh scripts/deploy-production.sh" \
+WATCH_LOCK_DIR="$TMP_DIR/watch.lock" \
   sh "$WATCH_SCRIPT" > "$TMP_DIR/watch.log"
 
 if [ "$(cat "$WORK/app.txt")" != "version-two" ]; then

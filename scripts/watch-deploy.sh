@@ -39,8 +39,8 @@ REMOTE_BRANCH="${WATCH_REMOTE_BRANCH:-${UPSTREAM#*/}}"
 log "Watching $UPSTREAM from $REPO_DIR every ${INTERVAL_SECONDS}s"
 
 while true; do
-  if [ -n "$(git status --porcelain)" ]; then
-    log "Working tree is not clean; skipping pull and deploy"
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    log "Tracked files are not clean; skipping pull and deploy"
   else
     git fetch "$REMOTE" "$REMOTE_BRANCH" >/dev/null 2>&1
 
