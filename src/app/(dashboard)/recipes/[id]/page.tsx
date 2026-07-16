@@ -81,6 +81,7 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
               <p>Węglowodany: {Math.round(nutrition.perServing.carbs)} g</p>
               <p>Tłuszcze: {Math.round(nutrition.perServing.fat)} g</p>
               <p>Błonnik: {Math.round(nutrition.perServing.fiber)} g</p>
+              <p>Sól: {nutrition.perServing.salt.toFixed(2)} g</p>
             </CardContent>
           </Card>
         </div>

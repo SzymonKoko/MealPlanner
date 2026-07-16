@@ -21,7 +21,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { calculateRecipeNutrition } from "../services/nutrition-calculator";
 import { AppError } from "@/lib/errors";
 
-async function resolveIngredientBaseUnit(
+async function resolveNutritionSource(
   householdId: string,
   ingredientId?: string | null,
   productId?: string | null,
@@ -31,7 +31,6 @@ async function resolveIngredientBaseUnit(
     if (!ingredient) throw new AppError("Składnik nie istnieje", "NOT_FOUND", 404);
     return {
       nutrition: ingredient,
-      baseUnit: ingredient.baseUnit,
     };
   }
 
@@ -39,14 +38,19 @@ async function resolveIngredientBaseUnit(
     const [product] = await db
       .select()
       .from(products)
-      .where(eq(products.id, productId))
+      .where(and(eq(products.id, productId), eq(products.householdId, householdId)))
       .limit(1);
-    if (!product || product.householdId !== householdId) {
+    if (!product) {
       throw new AppError("Produkt nie istnieje", "NOT_FOUND", 404);
     }
+    const linkedIngredient = product.ingredientId
+      ? await getIngredient(householdId, product.ingredientId)
+      : null;
     return {
-      nutrition: product,
-      baseUnit: product.packageUnit ?? "g",
+      nutrition: {
+        ...product,
+        densityGramsPerMl: linkedIngredient?.densityGramsPerMl ?? null,
+      },
     };
   }
 
@@ -69,7 +73,7 @@ async function validateRecipeReferences(
 ) {
   await Promise.all(
     recipeIngredients.map((item) =>
-      resolveIngredientBaseUnit(householdId, item.ingredientId, item.productId),
+      resolveNutritionSource(householdId, item.ingredientId, item.productId),
     ),
   );
 
@@ -139,12 +143,11 @@ export async function getRecipeNutritionAction(recipeId: string) {
 
   const inputs = await Promise.all(
     data.ingredients.map(async (ri) => {
-      const resolved = await resolveIngredientBaseUnit(householdId, ri.ingredientId, ri.productId);
+      const resolved = await resolveNutritionSource(householdId, ri.ingredientId, ri.productId);
       return {
         quantity: ri.quantity,
         unit: ri.unit,
         optional: ri.optional,
-        baseUnit: resolved.baseUnit,
         ...resolved.nutrition,
       };
     }),

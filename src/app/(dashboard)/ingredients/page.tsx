@@ -41,7 +41,13 @@ function NutritionFields({
 }: {
   values?: Pick<
     Ingredient | Product,
-    "kcalPer100" | "proteinPer100" | "carbsPer100" | "fatPer100" | "fiberPer100"
+    | "nutritionBasis"
+    | "kcalPer100"
+    | "proteinPer100"
+    | "carbsPer100"
+    | "fatPer100"
+    | "fiberPer100"
+    | "saltPer100"
   >;
   prefix: string;
 }) {
@@ -51,23 +57,41 @@ function NutritionFields({
     ["carbsPer100", "Węglowodany"],
     ["fatPer100", "Tłuszcze"],
     ["fiberPer100", "Błonnik"],
+    ["saltPer100", "Sól"],
   ] as const;
+  const basisLabel = values?.nutritionBasis === "per100ml" ? "100 ml" : "100 g";
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-      {fields.map(([name, label]) => (
-        <div className="space-y-2" key={name}>
-          <Label htmlFor={`${prefix}-${name}`}>{label}/100</Label>
-          <Input
-            id={`${prefix}-${name}`}
-            name={name}
-            type="number"
-            min="0"
-            step="0.1"
-            defaultValue={values?.[name] ?? ""}
-          />
-        </div>
-      ))}
-    </div>
+    <fieldset className="space-y-3 rounded-lg border p-3">
+      <legend className="px-1 text-sm font-medium">Wartości odżywcze</legend>
+      <div className="space-y-2">
+        <Label htmlFor={`${prefix}-nutritionBasis`}>Podstawa danych</Label>
+        <select
+          id={`${prefix}-nutritionBasis`}
+          name="nutritionBasis"
+          defaultValue={values?.nutritionBasis ?? "per100g"}
+          className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+        >
+          <option value="per100g">na 100 g</option>
+          <option value="per100ml">na 100 ml</option>
+        </select>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {fields.map(([name, label]) => (
+          <div className="space-y-2" key={name}>
+            <Label htmlFor={`${prefix}-${name}`}>{label} / {basisLabel}</Label>
+            <Input
+              id={`${prefix}-${name}`}
+              name={name}
+              type="number"
+              min="0"
+              step="0.0001"
+              inputMode="decimal"
+              defaultValue={values?.[name] ?? ""}
+            />
+          </div>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -147,6 +171,15 @@ function IngredientForm({
           />
         </div>
       </div>
+      <label className="flex min-h-11 items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="verifiedByUser"
+          value="true"
+          defaultChecked={ingredient?.verifiedByUser ?? false}
+        />
+        Dane sprawdzone ręcznie
+      </label>
       {tags.length ? (
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Tagi</legend>
@@ -199,7 +232,14 @@ function ProductForm({
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${prefix}-barcode`}>Kod kreskowy</Label>
-          <Input id={`${prefix}-barcode`} name="barcode" defaultValue={product?.barcode ?? ""} />
+          <Input
+            id={`${prefix}-barcode`}
+            name="barcode"
+            inputMode="numeric"
+            autoComplete="off"
+            defaultValue={product?.barcode ?? ""}
+            placeholder="EAN / UPC / GTIN"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${prefix}-ingredient`}>Powiązany składnik</Label>
@@ -232,6 +272,15 @@ function ProductForm({
         </div>
       </div>
       <NutritionFields values={product} prefix={prefix} />
+      <label className="flex min-h-11 items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="verifiedByUser"
+          value="true"
+          defaultChecked={product?.verifiedByUser ?? false}
+        />
+        Dane sprawdzone ręcznie
+      </label>
       {tags.length ? (
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Tagi</legend>
@@ -297,7 +346,7 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
         <h1 className="text-2xl font-bold">Składniki i produkty</h1>
 
         <form className="grid gap-2 sm:grid-cols-[1fr_13rem_13rem_auto]" method="get">
-          <Input name="q" defaultValue={search} placeholder="Szukaj składników i produktów" />
+          <Input name="q" defaultValue={search} placeholder="Nazwa, marka lub kod kreskowy" />
           <select
             name="category"
             defaultValue={category}
@@ -416,7 +465,14 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
                     <div>
                     <p className="font-medium">{ing.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {ing.kcalPer100 ? `${ing.kcalPer100} kcal/100${ing.baseUnit}` : "Brak makro"}
+                      {ing.kcalPer100
+                        ? `${ing.kcalPer100} kcal / ${ing.nutritionBasis === "per100ml" ? "100 ml" : "100 g"}`
+                        : "Brak makro"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Źródło: {ing.dataSource}
+                      {ing.verifiedByUser ? " · zweryfikowane" : ""}
+                      {ing.manuallyModified ? " · chronione po ręcznej zmianie" : ""}
                     </p>
                     </div>
                     {editable ? (
@@ -460,6 +516,17 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
                     <div>
                       <p className="font-medium">{prod.name}</p>
                       {prod.brand ? <p className="text-sm text-muted-foreground">{prod.brand}</p> : null}
+                      <p className="text-sm text-muted-foreground">
+                        {prod.kcalPer100
+                          ? `${prod.kcalPer100} kcal / ${prod.nutritionBasis === "per100ml" ? "100 ml" : "100 g"}`
+                          : "Brak makro"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {prod.barcode ? `Kod: ${prod.barcode} · ` : ""}
+                        Źródło: {prod.dataSource}
+                        {prod.verifiedByUser ? " · zweryfikowane" : ""}
+                        {prod.manuallyModified ? " · chronione po ręcznej zmianie" : ""}
+                      </p>
                     </div>
                     {editable ? (
                       <form action={deleteProductAction.bind(null, prod.id)}>

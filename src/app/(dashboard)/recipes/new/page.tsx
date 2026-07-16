@@ -23,24 +23,29 @@ export default async function NewRecipePage() {
             id: item.id,
             name: item.name,
             type: "ingredient" as const,
-            baseUnit: item.baseUnit,
+            nutritionBasis: item.nutritionBasis,
             kcalPer100: item.kcalPer100,
             proteinPer100: item.proteinPer100,
             carbsPer100: item.carbsPer100,
             fatPer100: item.fatPer100,
             fiberPer100: item.fiberPer100,
+            saltPer100: item.saltPer100,
             densityGramsPerMl: item.densityGramsPerMl,
           })),
           ...products.map((item) => ({
             id: item.id,
             name: item.name,
             type: "product" as const,
-            baseUnit: item.packageUnit ?? "g",
+            nutritionBasis: item.nutritionBasis,
             kcalPer100: item.kcalPer100,
             proteinPer100: item.proteinPer100,
             carbsPer100: item.carbsPer100,
             fatPer100: item.fatPer100,
             fiberPer100: item.fiberPer100,
+            saltPer100: item.saltPer100,
+            densityGramsPerMl:
+              ingredients.find((ingredient) => ingredient.id === item.ingredientId)
+                ?.densityGramsPerMl ?? null,
           })),
         ]}
         tags={tags.map((tag) => ({ id: tag.id, name: tag.name }))}

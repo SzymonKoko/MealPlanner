@@ -4,6 +4,8 @@ import {
   sumNutrition,
   type NutritionValues,
 } from "@/lib/nutrition";
+import Decimal from "decimal.js";
+import type { NutritionBasis } from "@/db/schema/ingredients";
 
 export interface RecipeIngredientInput {
   quantity: string;
@@ -14,7 +16,9 @@ export interface RecipeIngredientInput {
   carbsPer100?: string | null;
   fatPer100?: string | null;
   fiberPer100?: string | null;
-  baseUnit: string;
+  saltPer100?: string | null;
+  nutritionBasis: NutritionBasis;
+  densityGramsPerMl?: string | null;
 }
 
 export function calculateRecipeNutrition(
@@ -27,9 +31,8 @@ export function calculateRecipeNutrition(
     nonOptional.map((ingredient) =>
       calculateNutritionForQuantity(
         ingredient,
-        Number.parseFloat(ingredient.quantity),
+        ingredient.quantity,
         ingredient.unit,
-        ingredient.baseUnit,
       ),
     ),
   );
@@ -43,9 +46,12 @@ export function scaleRecipeIngredients(
   toServings: number,
 ) {
   if (fromServings <= 0) return ingredients;
-  const factor = toServings / fromServings;
+  const factor = new Decimal(toServings).div(fromServings);
   return ingredients.map((i) => ({
     ...i,
-    quantity: String(Number.parseFloat(i.quantity) * factor),
+    quantity: new Decimal(i.quantity)
+      .mul(factor)
+      .toDecimalPlaces(4, Decimal.ROUND_HALF_UP)
+      .toString(),
   }));
 }

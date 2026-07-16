@@ -6,7 +6,7 @@
 2. Identyfikatory powinny być UUID.
 3. Rekordy powinny posiadać `createdAt` i `updatedAt`.
 4. Dla danych usuwalnych warto rozważyć `deletedAt`.
-5. Wartości odżywcze przechowuj jako liczby dziesiętne.
+5. Wartości odżywcze przechowuj jako `numeric(12,4)` i licz względem jawnej podstawy `per100g` albo `per100ml`.
 6. Ilości przechowuj w jednostkach bazowych, gdy jest to możliwe.
 7. Obliczenia żywieniowe wykonuj po stronie serwera.
 
@@ -64,11 +64,19 @@ householdId + userId
 - `description`
 - `categoryId`
 - `baseUnit`
+- `nutritionBasis`
 - `kcalPer100`
 - `proteinPer100`
 - `carbsPer100`
 - `fatPer100`
 - `fiberPer100`
+- `saltPer100`
+- `dataSource`
+- `externalId`
+- `importedAt`
+- `sourceUpdatedAt`
+- `verifiedByUser`
+- `manuallyModified`
 - `createdBy`
 - `createdAt`
 - `updatedAt`
@@ -83,13 +91,19 @@ householdId + userId
 - `barcode`
 - `packageQuantity`
 - `packageUnit`
+- `nutritionBasis`
 - `kcalPer100`
 - `proteinPer100`
 - `carbsPer100`
 - `fatPer100`
 - `fiberPer100`
-- `source`
+- `saltPer100`
+- `dataSource`
 - `externalId`
+- `importedAt`
+- `sourceUpdatedAt`
+- `verifiedByUser`
+- `manuallyModified`
 - `imageUrl`
 - `createdAt`
 - `updatedAt`

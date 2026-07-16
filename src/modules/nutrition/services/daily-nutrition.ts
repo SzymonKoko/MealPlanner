@@ -4,6 +4,8 @@ import {
   scaleNutrition,
   sumNutrition,
   parseDecimal,
+  EMPTY_NUTRITION,
+  type NutritionPer100,
   type NutritionValues,
 } from "@/lib/nutrition";
 import { getMealPlanForDate } from "@/modules/meal-planner/repository/meal-plan-repository";
@@ -42,14 +44,7 @@ export async function calculateDailyNutritionForUser(
 
     const ingredientNutrition = await Promise.all(
       recipeData.ingredients.map(async (ri) => {
-        let nutritionSource: {
-          kcalPer100?: string | null;
-          proteinPer100?: string | null;
-          carbsPer100?: string | null;
-          fatPer100?: string | null;
-          fiberPer100?: string | null;
-          baseUnit: string;
-        } | null = null;
+        let nutritionSource: NutritionPer100 | null = null;
 
         if (ri.ingredientId) {
           const [ingredient] = await db
@@ -64,7 +59,7 @@ export async function calculateDailyNutritionForUser(
             )
             .limit(1);
           if (ingredient) {
-            nutritionSource = { ...ingredient, baseUnit: ingredient.baseUnit };
+            nutritionSource = ingredient;
           }
         } else if (ri.productId) {
           const [product] = await db
@@ -78,19 +73,34 @@ export async function calculateDailyNutritionForUser(
             )
             .limit(1);
           if (product) {
-            nutritionSource = { ...product, baseUnit: product.packageUnit ?? "g" };
+            const [linkedIngredient] = product.ingredientId
+              ? await db
+                  .select({ densityGramsPerMl: ingredients.densityGramsPerMl })
+                  .from(ingredients)
+                  .where(
+                    and(
+                      eq(ingredients.id, product.ingredientId),
+                      eq(ingredients.householdId, householdId),
+                      isNull(ingredients.deletedAt),
+                    ),
+                  )
+                  .limit(1)
+              : [];
+            nutritionSource = {
+              ...product,
+              densityGramsPerMl: linkedIngredient?.densityGramsPerMl ?? null,
+            };
           }
         }
 
         if (!nutritionSource || ri.optional) {
-          return { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+          return { ...EMPTY_NUTRITION };
         }
 
         const total = calculateNutritionForQuantity(
           nutritionSource,
-          Number.parseFloat(ri.quantity),
+          ri.quantity,
           ri.unit,
-          nutritionSource.baseUnit,
         );
         return total;
       }),

@@ -6,8 +6,10 @@ import {
   requireActiveHouseholdEditor,
 } from "@/server/require-household-member";
 import {
-  ingredientSchema,
-  productSchema,
+  ingredientCreateSchema,
+  ingredientUpdateSchema,
+  productCreateSchema,
+  productUpdateSchema,
   categorySchema,
   tagSchema,
 } from "../validators/ingredient-schemas";
@@ -26,11 +28,13 @@ import {
   deleteTag,
   updateCategory,
   updateTag,
+  getProduct,
 } from "../repository/ingredient-repository";
 import { AppError } from "@/lib/errors";
 import { db } from "@/db/client";
 import { categories, tags } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { markManualNutritionUpdate } from "../services/nutrition-source";
 
 async function validateIngredientReferences(
   householdId: string,
@@ -68,7 +72,7 @@ async function validateIngredientReferences(
 
 export async function createIngredientAction(formData: FormData) {
   const { user, householdId } = await requireActiveHouseholdEditor();
-  const parsed = ingredientSchema.safeParse({
+  const parsed = ingredientCreateSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     categoryId: formData.get("categoryId") || null,
@@ -78,8 +82,11 @@ export async function createIngredientAction(formData: FormData) {
     carbsPer100: formData.get("carbsPer100") || undefined,
     fatPer100: formData.get("fatPer100") || undefined,
     fiberPer100: formData.get("fiberPer100") || undefined,
+    saltPer100: formData.get("saltPer100") || undefined,
+    nutritionBasis: formData.get("nutritionBasis") || "per100g",
     densityGramsPerMl: formData.get("densityGramsPerMl") || undefined,
     allergens: formData.get("allergens") || undefined,
+    verifiedByUser: formData.get("verifiedByUser") === "true",
     tagIds: formData.getAll("tagIds"),
   });
 
@@ -89,13 +96,19 @@ export async function createIngredientAction(formData: FormData) {
 
   const { tagIds, ...data } = parsed.data;
   await validateIngredientReferences(householdId, data.categoryId, tagIds);
-  await createIngredient(householdId, user.id, data, tagIds);
+  await createIngredient(
+    householdId,
+    user.id,
+    // Manual creation should be protected from future external sync.
+    { ...data, dataSource: "manual", manuallyModified: true },
+    tagIds,
+  );
   revalidatePath("/ingredients");
 }
 
 export async function updateIngredientAction(id: string, formData: FormData) {
   const { householdId } = await requireActiveHouseholdEditor();
-  const parsed = ingredientSchema.safeParse({
+  const parsed = ingredientUpdateSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
     categoryId: formData.get("categoryId") || null,
@@ -105,8 +118,11 @@ export async function updateIngredientAction(id: string, formData: FormData) {
     carbsPer100: formData.get("carbsPer100") || undefined,
     fatPer100: formData.get("fatPer100") || undefined,
     fiberPer100: formData.get("fiberPer100") || undefined,
+    saltPer100: formData.get("saltPer100") || undefined,
+    nutritionBasis: formData.get("nutritionBasis") || "per100g",
     densityGramsPerMl: formData.get("densityGramsPerMl") || undefined,
     allergens: formData.get("allergens") || undefined,
+    verifiedByUser: formData.get("verifiedByUser") === "true",
     tagIds: formData.getAll("tagIds"),
   });
 
@@ -116,7 +132,17 @@ export async function updateIngredientAction(id: string, formData: FormData) {
 
   const { tagIds, ...data } = parsed.data;
   await validateIngredientReferences(householdId, data.categoryId, tagIds);
-  const ingredient = await updateIngredient(householdId, id, data, tagIds);
+  const current = await getIngredient(householdId, id);
+  if (!current) {
+    throw new AppError("Składnik nie istnieje", "NOT_FOUND", 404);
+  }
+  const sourceUpdate = markManualNutritionUpdate(current, data);
+  const ingredient = await updateIngredient(
+    householdId,
+    id,
+    { ...data, ...sourceUpdate },
+    tagIds,
+  );
   if (!ingredient) {
     throw new AppError("Składnik nie istnieje", "NOT_FOUND", 404);
   }
@@ -133,7 +159,7 @@ export async function deleteIngredientAction(id: string) {
 
 export async function createProductAction(formData: FormData) {
   const { householdId } = await requireActiveHouseholdEditor();
-  const parsed = productSchema.safeParse({
+  const parsed = productCreateSchema.safeParse({
     ingredientId: formData.get("ingredientId") || null,
     name: formData.get("name"),
     brand: formData.get("brand") || undefined,
@@ -145,6 +171,9 @@ export async function createProductAction(formData: FormData) {
     carbsPer100: formData.get("carbsPer100") || undefined,
     fatPer100: formData.get("fatPer100") || undefined,
     fiberPer100: formData.get("fiberPer100") || undefined,
+    saltPer100: formData.get("saltPer100") || undefined,
+    nutritionBasis: formData.get("nutritionBasis") || "per100g",
+    verifiedByUser: formData.get("verifiedByUser") === "true",
     tagIds: formData.getAll("tagIds"),
   });
 
@@ -161,13 +190,18 @@ export async function createProductAction(formData: FormData) {
 
   const { tagIds, ...data } = parsed.data;
   await validateIngredientReferences(householdId, null, tagIds, "product");
-  await createProduct(householdId, data, tagIds);
+  await createProduct(
+    householdId,
+    // Manual creation should be protected from future external sync.
+    { ...data, dataSource: "manual", manuallyModified: true },
+    tagIds,
+  );
   revalidatePath("/ingredients");
 }
 
 export async function updateProductAction(id: string, formData: FormData) {
   const { householdId } = await requireActiveHouseholdEditor();
-  const parsed = productSchema.safeParse({
+  const parsed = productUpdateSchema.safeParse({
     ingredientId: formData.get("ingredientId") || null,
     name: formData.get("name"),
     brand: formData.get("brand") || undefined,
@@ -179,6 +213,9 @@ export async function updateProductAction(id: string, formData: FormData) {
     carbsPer100: formData.get("carbsPer100") || undefined,
     fatPer100: formData.get("fatPer100") || undefined,
     fiberPer100: formData.get("fiberPer100") || undefined,
+    saltPer100: formData.get("saltPer100") || undefined,
+    nutritionBasis: formData.get("nutritionBasis") || "per100g",
+    verifiedByUser: formData.get("verifiedByUser") === "true",
     tagIds: formData.getAll("tagIds"),
   });
   if (!parsed.success) {
@@ -189,7 +226,12 @@ export async function updateProductAction(id: string, formData: FormData) {
   }
   const { tagIds, ...data } = parsed.data;
   await validateIngredientReferences(householdId, null, tagIds, "product");
-  if (!(await updateProduct(householdId, id, data, tagIds))) {
+  const current = await getProduct(householdId, id);
+  if (!current) {
+    throw new AppError("Produkt nie istnieje", "NOT_FOUND", 404);
+  }
+  const sourceUpdate = markManualNutritionUpdate(current, data);
+  if (!(await updateProduct(householdId, id, { ...data, ...sourceUpdate }, tagIds))) {
     throw new AppError("Produkt nie istnieje", "NOT_FOUND", 404);
   }
   revalidatePath("/ingredients");

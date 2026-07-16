@@ -31,7 +31,7 @@ export async function GET() {
         IF NOT EXISTS (
           SELECT 1
           FROM schema_migrations
-          WHERE filename = '0005_single_household_owner.sql'
+          WHERE filename = '0006_nutrition_foundation.sql'
             AND checksum IS NOT NULL
         ) THEN
           RAISE EXCEPTION 'Database migrations are incomplete';

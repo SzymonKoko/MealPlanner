@@ -1,6 +1,29 @@
-import { pgTable, uuid, text, integer, timestamp, uniqueIndex, primaryKey } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { households } from "./households";
 import { users } from "./users";
+import { sql } from "drizzle-orm";
+
+export const nutritionBasisEnum = ["per100g", "per100ml"] as const;
+export type NutritionBasis = (typeof nutritionBasisEnum)[number];
+
+export const nutritionDataSourceEnum = [
+  "manual",
+  "open_food_facts",
+  "usda",
+  "nutrition_label_ocr",
+  "household_override",
+] as const;
+export type NutritionDataSource = (typeof nutritionDataSourceEnum)[number];
 
 export const categories = pgTable("categories", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -33,18 +56,30 @@ export const ingredients = pgTable("ingredients", {
   description: text("description"),
   categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
   baseUnit: text("base_unit").notNull().default("g"),
-  kcalPer100: text("kcal_per_100"),
-  proteinPer100: text("protein_per_100"),
-  carbsPer100: text("carbs_per_100"),
-  fatPer100: text("fat_per_100"),
-  fiberPer100: text("fiber_per_100"),
+  nutritionBasis: text("nutrition_basis").notNull().$type<NutritionBasis>().default("per100g"),
+  kcalPer100: numeric("kcal_per_100", { precision: 12, scale: 4 }),
+  proteinPer100: numeric("protein_per_100", { precision: 12, scale: 4 }),
+  carbsPer100: numeric("carbs_per_100", { precision: 12, scale: 4 }),
+  fatPer100: numeric("fat_per_100", { precision: 12, scale: 4 }),
+  fiberPer100: numeric("fiber_per_100", { precision: 12, scale: 4 }),
+  saltPer100: numeric("salt_per_100", { precision: 12, scale: 4 }),
   densityGramsPerMl: text("density_grams_per_ml"),
   allergens: text("allergens"),
+  dataSource: text("data_source").notNull().$type<NutritionDataSource>().default("manual"),
+  externalId: text("external_id"),
+  importedAt: timestamp("imported_at", { withTimezone: true }),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  verifiedByUser: boolean("verified_by_user").notNull().default(false),
+  manuallyModified: boolean("manually_modified").notNull().default(false),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+}, (table) => [
+  uniqueIndex("ingredients_household_source_external_idx")
+    .on(table.householdId, table.dataSource, table.externalId)
+    .where(sql`${table.externalId} is not null`),
+]);
 
 export const products = pgTable("products", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -57,17 +92,27 @@ export const products = pgTable("products", {
   barcode: text("barcode"),
   packageQuantity: text("package_quantity"),
   packageUnit: text("package_unit"),
-  kcalPer100: text("kcal_per_100"),
-  proteinPer100: text("protein_per_100"),
-  carbsPer100: text("carbs_per_100"),
-  fatPer100: text("fat_per_100"),
-  fiberPer100: text("fiber_per_100"),
-  source: text("source"),
+  nutritionBasis: text("nutrition_basis").notNull().$type<NutritionBasis>().default("per100g"),
+  kcalPer100: numeric("kcal_per_100", { precision: 12, scale: 4 }),
+  proteinPer100: numeric("protein_per_100", { precision: 12, scale: 4 }),
+  carbsPer100: numeric("carbs_per_100", { precision: 12, scale: 4 }),
+  fatPer100: numeric("fat_per_100", { precision: 12, scale: 4 }),
+  fiberPer100: numeric("fiber_per_100", { precision: 12, scale: 4 }),
+  saltPer100: numeric("salt_per_100", { precision: 12, scale: 4 }),
+  dataSource: text("data_source").notNull().$type<NutritionDataSource>().default("manual"),
   externalId: text("external_id"),
+  importedAt: timestamp("imported_at", { withTimezone: true }),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  verifiedByUser: boolean("verified_by_user").notNull().default(false),
+  manuallyModified: boolean("manually_modified").notNull().default(false),
   imageUrl: text("image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("products_household_source_external_idx")
+    .on(table.householdId, table.dataSource, table.externalId)
+    .where(sql`${table.externalId} is not null`),
+]);
 
 export const ingredientTags = pgTable(
   "ingredient_tags",

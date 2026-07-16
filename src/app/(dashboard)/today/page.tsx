@@ -86,6 +86,7 @@ export default async function TodayPage() {
           <NutritionCard label="Węglowodany" consumed={progress.carbs.consumed} target={progress.carbs.target} unit="g" />
           <NutritionCard label="Tłuszcze" consumed={progress.fat.consumed} target={progress.fat.target} unit="g" />
           <NutritionCard label="Błonnik" consumed={progress.fiber.consumed} target={progress.fiber.target} unit="g" />
+          <NutritionCard label="Sól" consumed={nutrition.consumed.salt} target={0} unit="g" decimals={2} />
         </div>
 
         <Card>
@@ -119,11 +120,13 @@ function NutritionCard({
   consumed,
   target,
   unit,
+  decimals = 0,
 }: {
   label: string;
   consumed: number;
   target: number;
   unit: string;
+  decimals?: number;
 }) {
   const percent = target > 0 ? Math.min(100, (consumed / target) * 100) : 0;
 
@@ -132,7 +135,7 @@ function NutritionCard({
       <CardContent className="pt-4">
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="text-xl font-semibold">
-          {Math.round(consumed)} / {target > 0 ? Math.round(target) : "—"} {unit}
+          {consumed.toFixed(decimals)} / {target > 0 ? target.toFixed(decimals) : "—"} {unit}
         </p>
         {target > 0 ? (
           <div className="mt-2 h-2 rounded-full bg-muted">

@@ -14,20 +14,23 @@ import {
 import { SUPPORTED_UNITS } from "@/lib/units";
 import {
   calculateNutritionForQuantity,
+  EMPTY_NUTRITION,
   perServing,
   sumNutrition,
 } from "@/lib/nutrition";
+import type { NutritionBasis } from "@/db/schema/ingredients";
 
 interface RecipeSourceOption {
   id: string;
   name: string;
   type: "ingredient" | "product";
-  baseUnit: string;
+  nutritionBasis: NutritionBasis;
   kcalPer100: string | null;
   proteinPer100: string | null;
   carbsPer100: string | null;
   fatPer100: string | null;
   fiberPer100: string | null;
+  saltPer100: string | null;
   densityGramsPerMl?: string | null;
 }
 
@@ -81,22 +84,23 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
     source.name.toLocaleLowerCase("pl").includes(sourceSearch.toLocaleLowerCase("pl")),
   );
   const nutritionPreview = useMemo(() => {
+    let warning: string | null = null;
     const total = sumNutrition(
       rows.map((row) => {
-        if (row.optional) return { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+        if (row.optional) return { ...EMPTY_NUTRITION };
         const source = sources.find(
           (item) => item.id === row.sourceId && item.type === row.sourceType,
         );
-        if (!source) return { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
-        return calculateNutritionForQuantity(
-          source,
-          Number.parseFloat(row.quantity) || 0,
-          row.unit,
-          source.baseUnit,
-        );
+        if (!source) return { ...EMPTY_NUTRITION };
+        try {
+          return calculateNutritionForQuantity(source, row.quantity || "0", row.unit);
+        } catch (conversionError) {
+          warning = conversionError instanceof Error ? conversionError.message : "Nie można przeliczyć jednostek";
+          return { ...EMPTY_NUTRITION };
+        }
       }),
     );
-    return perServing(total, servings);
+    return { values: perServing(total, servings), warning };
   }, [rows, servings, sources]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -346,12 +350,16 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
 
       <Card>
         <CardHeader><CardTitle>Makro na porcję — podgląd</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
-          <span>{Math.round(nutritionPreview.kcal)} kcal</span>
-          <span>B: {Math.round(nutritionPreview.protein)} g</span>
-          <span>W: {Math.round(nutritionPreview.carbs)} g</span>
-          <span>T: {Math.round(nutritionPreview.fat)} g</span>
-          <span>Bł: {Math.round(nutritionPreview.fiber)} g</span>
+        <CardContent className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-6">
+          <span>{Math.round(nutritionPreview.values.kcal)} kcal</span>
+          <span>B: {nutritionPreview.values.protein.toFixed(1)} g</span>
+          <span>W: {nutritionPreview.values.carbs.toFixed(1)} g</span>
+          <span>T: {nutritionPreview.values.fat.toFixed(1)} g</span>
+          <span>Bł: {nutritionPreview.values.fiber.toFixed(1)} g</span>
+          <span>Sól: {nutritionPreview.values.salt.toFixed(2)} g</span>
+          {nutritionPreview.warning ? (
+            <p className="col-span-full text-destructive">{nutritionPreview.warning}</p>
+          ) : null}
         </CardContent>
       </Card>
 

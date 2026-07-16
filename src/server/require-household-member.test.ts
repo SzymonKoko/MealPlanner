@@ -85,4 +85,12 @@ describe("household authorization", () => {
       role: "owner",
     });
   });
+
+  it("blocks access to a household without membership", async () => {
+    state.hasMembership = false;
+    await expect(requireHouseholdEditor("household-2")).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      status: 403,
+    });
+  });
 });

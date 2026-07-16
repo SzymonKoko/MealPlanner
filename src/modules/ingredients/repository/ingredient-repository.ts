@@ -7,7 +7,7 @@ import {
   ingredientTags,
   productTags,
 } from "@/db/schema";
-import { and, eq, ilike, isNull, inArray } from "drizzle-orm";
+import { and, eq, ilike, isNull, inArray, or } from "drizzle-orm";
 
 export async function listIngredients(householdId: string, search?: string, categoryId?: string) {
   const conditions = [
@@ -106,13 +106,30 @@ export async function softDeleteIngredient(householdId: string, id: string) {
 
 export async function listProducts(householdId: string, search?: string) {
   const conditions = [eq(products.householdId, householdId)];
-  if (search) conditions.push(ilike(products.name, `%${search}%`));
+  if (search) {
+    conditions.push(
+      or(
+        ilike(products.name, `%${search}%`),
+        ilike(products.brand, `%${search}%`),
+        ilike(products.barcode, `%${search}%`),
+      )!,
+    );
+  }
 
   return db
     .select()
     .from(products)
     .where(and(...conditions))
     .orderBy(products.name);
+}
+
+export async function getProduct(householdId: string, id: string) {
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(and(eq(products.id, id), eq(products.householdId, householdId)))
+    .limit(1);
+  return product ?? null;
 }
 
 type ProductInput = Omit<
