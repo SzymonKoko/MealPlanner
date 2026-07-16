@@ -85,7 +85,7 @@ const fieldLabels: Record<string, string> = {
   nutritionBasis: "Podstawa danych",
   kcalPer100: "Kalorie",
   proteinPer100: "Białko",
-  carbsPer100: "Węglowodany",
+  carbsPer100: "Węgle",
   fatPer100: "Tłuszcze",
   fiberPer100: "Błonnik",
   saltPer100: "Sól",
@@ -95,7 +95,7 @@ const fieldLabels: Record<string, string> = {
 const nutritionFields = [
   ["kcalPer100", "kcal"],
   ["proteinPer100", "Białko"],
-  ["carbsPer100", "Węglowodany"],
+  ["carbsPer100", "Węgle"],
   ["fatPer100", "Tłuszcze"],
   ["fiberPer100", "Błonnik"],
   ["saltPer100", "Sól"],
@@ -429,7 +429,9 @@ export function BarcodeScannerFlow({
               </div>
 
               <fieldset className="space-y-3 rounded-lg border p-3">
-                <legend className="px-1 text-sm font-medium">Wartości odżywcze</legend>
+                <legend className="px-1 text-sm font-medium">
+                  Wartości odżywcze (na {currentBasis === "per100ml" ? "100 ml" : "100 g"})
+                </legend>
                 <div className="space-y-2">
                   <Label htmlFor="product-nutritionBasis">Podstawa danych</Label>
                   <select
@@ -445,8 +447,10 @@ export function BarcodeScannerFlow({
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {nutritionFields.map(([field, label]) => (
-                    <div key={field} className="space-y-2">
-                      <Label htmlFor={field}>{label} / {currentBasis === "per100ml" ? "100 ml" : "100 g"}</Label>
+                    <div key={field} className="flex min-w-0 flex-col gap-2">
+                      <Label htmlFor={field} className="min-h-10 leading-tight">
+                        {label}
+                      </Label>
                       <Input
                         id={field}
                         name={field}

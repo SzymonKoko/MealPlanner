@@ -9,9 +9,9 @@ export function DashboardShellClient({ children }: { children: React.ReactNode }
 
   return (
     <>
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 py-4">
+      <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 gap-6 overflow-x-hidden overflow-y-auto px-4 py-4">
         <SideNav pathname={pathname} />
-        <main className="min-h-[calc(100vh-8rem)] flex-1 pb-24 md:pb-8">{children}</main>
+        <main className="min-w-0 flex-1 pb-4 md:pb-8">{children}</main>
       </div>
       <BottomNav />
     </>

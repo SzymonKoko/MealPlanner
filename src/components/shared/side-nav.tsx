@@ -17,7 +17,7 @@ interface SideNavProps {
 
 export function SideNav({ pathname }: SideNavProps) {
   return (
-    <nav className="hidden w-48 shrink-0 md:block">
+    <nav className="hidden w-44 shrink-0 self-start sticky top-0 md:block">
       <ul className="space-y-1">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);

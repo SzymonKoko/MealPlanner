@@ -9,14 +9,14 @@ export async function AppHeader() {
   const households = await listUserHouseholds(user.id);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-        <Link href="/today" className="text-lg font-semibold">
+    <header className="z-40 shrink-0 border-b bg-background/95 backdrop-blur">
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 px-4 py-3">
+        <Link href="/today" className="shrink-0 text-lg font-semibold">
           MealPlanner
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <HouseholdSwitcher households={households} activeHouseholdId={user.activeHouseholdId} />
-          <span className="hidden text-sm text-muted-foreground sm:inline">{user.displayName}</span>
+          <span className="hidden truncate text-sm text-muted-foreground sm:inline">{user.displayName}</span>
           <SignOutButton />
         </div>
       </div>
