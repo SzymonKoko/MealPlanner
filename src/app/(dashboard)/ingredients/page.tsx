@@ -24,6 +24,7 @@ import {
   updateTagAction,
   replaceIngredientUnitConversionsAction,
 } from "@/modules/ingredients/actions/ingredient-actions";
+import { AddIngredientPanel } from "@/modules/ingredients/components/add-ingredient-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -418,23 +419,11 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
   return (
     <DashboardShell>
       <div className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">Składniki</h1>
-            <p className="text-sm text-muted-foreground">
-              Jedna lista pozycji do przepisów — z kodem lub bez.
-            </p>
-          </div>
-          {editable ? (
-            <div className="flex flex-wrap gap-2">
-              <Button asChild size="sm">
-                <Link href="/ingredients/scan">Skanuj kod</Link>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/ingredients/usda">USDA</Link>
-              </Button>
-            </div>
-          ) : null}
+        <div>
+          <h1 className="text-2xl font-bold">Składniki</h1>
+          <p className="text-sm text-muted-foreground">
+            Jedna lista pozycji do przepisów — z kodem lub bez.
+          </p>
         </div>
 
         <form
@@ -471,229 +460,226 @@ export default async function IngredientsPage({ searchParams }: IngredientsPageP
           </Button>
         </form>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
-          {editable ? (
-            <aside className="order-2 space-y-4 lg:order-1 lg:sticky lg:top-0 lg:self-start">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Dodaj</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CatalogItemForm
-                    action={createCatalogItemAction}
-                    categories={categories}
-                    tags={[]}
-                    submitLabel="Zapisz"
-                    showStoreFields
-                  />
-                </CardContent>
-              </Card>
+        {editable ? (
+          <AddIngredientPanel
+            manualForm={
+              <CatalogItemForm
+                action={createCatalogItemAction}
+                categories={categories}
+                tags={[]}
+                submitLabel="Zapisz"
+                showStoreFields
+              />
+            }
+          />
+        ) : (
+          <p className="rounded-lg border p-3 text-sm text-muted-foreground">
+            Masz dostęp tylko do odczytu.
+          </p>
+        )}
 
-              <details className="rounded-lg border bg-card">
-                <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Kategorie i tagi</summary>
-                <div className="space-y-4 border-t px-4 py-3">
-                  <div className="space-y-2">
-                    <form action={createCategoryAction} className="flex gap-2">
-                      <Input name="name" placeholder="Nowa kategoria" required className="h-10" />
-                      <Button type="submit" size="sm">
-                        Dodaj
-                      </Button>
-                    </form>
-                    {categories.map((cat) => (
-                      <details key={cat.id}>
-                        <summary className="cursor-pointer text-sm">{cat.name}</summary>
-                        <form
-                          action={updateCategoryAction.bind(null, cat.id)}
-                          className="mt-2 flex flex-wrap gap-2"
-                        >
-                          <Input name="name" defaultValue={cat.name} required className="h-10 min-w-0 flex-1" />
-                          <Input
-                            name="sortOrder"
-                            type="number"
-                            defaultValue={cat.sortOrder}
-                            className="h-10 w-20 shrink-0"
-                            aria-label="Kolejność"
-                          />
-                          <Button type="submit" size="sm">
-                            Zapisz
-                          </Button>
-                          <Button
-                            formAction={deleteCategoryAction.bind(null, cat.id)}
-                            type="submit"
-                            variant="ghost"
-                            size="sm"
-                          >
-                            Usuń
-                          </Button>
-                        </form>
-                      </details>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    <form action={createTagAction} className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                      <Input name="name" placeholder="Nowy tag" required className="h-10" />
-                      <input type="hidden" name="type" value="ingredient" />
-                      <Button type="submit" size="sm">
-                        Dodaj
-                      </Button>
-                    </form>
-                    {allTags
-                      .filter((entry) => entry.type === "ingredient")
-                      .map((tagEntry) => (
-                        <details key={tagEntry.id}>
-                          <summary className="cursor-pointer text-sm">{tagEntry.name}</summary>
-                          <form
-                            action={updateTagAction.bind(null, tagEntry.id)}
-                            className="mt-2 flex flex-wrap gap-2"
-                          >
-                            <Input
-                              name="name"
-                              defaultValue={tagEntry.name}
-                              required
-                              className="h-10 min-w-0 flex-1"
-                            />
-                            <input type="hidden" name="type" value={tagEntry.type} />
-                            <Button type="submit" size="sm">
-                              Zapisz
-                            </Button>
-                            <Button
-                              formAction={deleteTagAction.bind(null, tagEntry.id)}
-                              type="submit"
-                              variant="ghost"
-                              size="sm"
-                            >
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Lista ({catalog.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {catalog.length === 0 ? (
+              <p className="text-muted-foreground">
+                Brak pozycji. Kliknij „Dodaj składnik”, żeby zacząć.
+              </p>
+            ) : (
+              catalog.map((item) => {
+                if (item.kind === "ingredient") {
+                  const ing = item.entry;
+                  return (
+                    <div key={`i-${ing.id}`} className="rounded-lg border p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium">{ing.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {ing.kcalPer100
+                              ? `${ing.kcalPer100} kcal / ${ing.nutritionBasis === "per100ml" ? "100 ml" : "100 g"}`
+                              : "Brak makro"}
+                            {ing.dataSource !== "manual" ? ` · ${ing.dataSource}` : ""}
+                          </p>
+                        </div>
+                        {editable ? (
+                          <form action={deleteIngredientAction.bind(null, ing.id)}>
+                            <Button type="submit" variant="ghost" size="sm" className="text-destructive">
                               Usuń
                             </Button>
                           </form>
-                        </details>
-                      ))}
-                  </div>
-                </div>
-              </details>
-            </aside>
-          ) : (
-            <p className="rounded-lg border p-3 text-sm text-muted-foreground lg:col-span-1">
-              Masz dostęp tylko do odczytu.
-            </p>
-          )}
-
-          <Card className="order-1 lg:order-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Lista ({catalog.length})</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {catalog.length === 0 ? (
-                <p className="text-muted-foreground">Brak pozycji. Dodaj pierwszą z lewej lub zeskanuj kod.</p>
-              ) : (
-                catalog.map((item) => {
-                  if (item.kind === "ingredient") {
-                    const ing = item.entry;
-                    return (
-                      <div key={`i-${ing.id}`} className="rounded-lg border p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-medium">{ing.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {ing.kcalPer100
-                                ? `${ing.kcalPer100} kcal / ${ing.nutritionBasis === "per100ml" ? "100 ml" : "100 g"}`
-                                : "Brak makro"}
-                              {ing.dataSource !== "manual" ? ` · ${ing.dataSource}` : ""}
-                            </p>
-                          </div>
-                          {editable ? (
-                            <form action={deleteIngredientAction.bind(null, ing.id)}>
-                              <Button type="submit" variant="ghost" size="sm" className="text-destructive">
-                                Usuń
-                              </Button>
-                            </form>
-                          ) : null}
-                        </div>
-                        {editable ? (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-sm font-medium">Edytuj</summary>
-                            <div className="mt-3 space-y-4">
-                              <CatalogItemForm
-                                action={updateIngredientAction.bind(null, ing.id)}
-                                item={ing}
-                                categories={categories}
-                                tags={tags}
-                                selectedTagIds={tagIdsByIngredient.get(ing.id)}
-                                submitLabel="Zapisz"
-                                showStoreFields={false}
-                              />
-                              <div className="border-t pt-3">
-                                <IngredientConversionsForm
-                                  ingredientId={ing.id}
-                                  conversions={conversionsByIngredient.get(ing.id) ?? []}
-                                />
-                              </div>
-                            </div>
-                          </details>
-                        ) : null}
-                      </div>
-                    );
-                  }
-
-                  const prod = item.entry;
-                  return (
-                    <div key={`p-${prod.id}`} className="rounded-lg border p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium">
-                            {prod.name}
-                            {prod.brand ? (
-                              <span className="font-normal text-muted-foreground"> · {prod.brand}</span>
-                            ) : null}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {prod.kcalPer100
-                              ? `${prod.kcalPer100} kcal / ${prod.nutritionBasis === "per100ml" ? "100 ml" : "100 g"}`
-                              : "Brak makro"}
-                            {prod.barcode ? ` · ${prod.barcode}` : ""}
-                          </p>
-                        </div>
-                        {editable ? (
-                          <div className="flex shrink-0 flex-wrap gap-1">
-                            {prod.barcode ? (
-                              <Button asChild type="button" variant="outline" size="sm">
-                                <Link
-                                  href={`/ingredients/scan?barcode=${encodeURIComponent(prod.barcode)}&refresh=1`}
-                                >
-                                  OFF
-                                </Link>
-                              </Button>
-                            ) : null}
-                            <form action={deleteProductAction.bind(null, prod.id)}>
-                              <Button type="submit" variant="ghost" size="sm" className="text-destructive">
-                                Usuń
-                              </Button>
-                            </form>
-                          </div>
                         ) : null}
                       </div>
                       {editable ? (
                         <details className="mt-2">
                           <summary className="cursor-pointer text-sm font-medium">Edytuj</summary>
-                          <div className="mt-3">
+                          <div className="mt-3 space-y-4">
                             <CatalogItemForm
-                              action={updateProductAction.bind(null, prod.id)}
-                              item={prod}
+                              action={updateIngredientAction.bind(null, ing.id)}
+                              item={ing}
                               categories={categories}
-                              tags={productTagOptions}
-                              selectedTagIds={tagIdsByProduct.get(prod.id)}
+                              tags={tags}
+                              selectedTagIds={tagIdsByIngredient.get(ing.id)}
                               submitLabel="Zapisz"
-                              showStoreFields
+                              showStoreFields={false}
                             />
+                            <div className="border-t pt-3">
+                              <IngredientConversionsForm
+                                ingredientId={ing.id}
+                                conversions={conversionsByIngredient.get(ing.id) ?? []}
+                              />
+                            </div>
                           </div>
                         </details>
                       ) : null}
                     </div>
                   );
-                })
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                }
+
+                const prod = item.entry;
+                return (
+                  <div key={`p-${prod.id}`} className="rounded-lg border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium">
+                          {prod.name}
+                          {prod.brand ? (
+                            <span className="font-normal text-muted-foreground"> · {prod.brand}</span>
+                          ) : null}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {prod.kcalPer100
+                            ? `${prod.kcalPer100} kcal / ${prod.nutritionBasis === "per100ml" ? "100 ml" : "100 g"}`
+                            : "Brak makro"}
+                          {prod.barcode ? ` · ${prod.barcode}` : ""}
+                        </p>
+                      </div>
+                      {editable ? (
+                        <div className="flex shrink-0 flex-wrap gap-1">
+                          {prod.barcode ? (
+                            <Button asChild type="button" variant="outline" size="sm">
+                              <Link
+                                href={`/ingredients/scan?barcode=${encodeURIComponent(prod.barcode)}&refresh=1`}
+                              >
+                                OFF
+                              </Link>
+                            </Button>
+                          ) : null}
+                          <form action={deleteProductAction.bind(null, prod.id)}>
+                            <Button type="submit" variant="ghost" size="sm" className="text-destructive">
+                              Usuń
+                            </Button>
+                          </form>
+                        </div>
+                      ) : null}
+                    </div>
+                    {editable ? (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-sm font-medium">Edytuj</summary>
+                        <div className="mt-3">
+                          <CatalogItemForm
+                            action={updateProductAction.bind(null, prod.id)}
+                            item={prod}
+                            categories={categories}
+                            tags={productTagOptions}
+                            selectedTagIds={tagIdsByProduct.get(prod.id)}
+                            submitLabel="Zapisz"
+                            showStoreFields
+                          />
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        {editable ? (
+          <details className="rounded-lg border bg-card">
+            <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Kategorie i tagi</summary>
+            <div className="space-y-4 border-t px-4 py-3 md:grid md:grid-cols-2 md:gap-6 md:space-y-0">
+              <div className="space-y-2">
+                <form action={createCategoryAction} className="flex gap-2">
+                  <Input name="name" placeholder="Nowa kategoria" required className="h-10" />
+                  <Button type="submit" size="sm">
+                    Dodaj
+                  </Button>
+                </form>
+                {categories.map((cat) => (
+                  <details key={cat.id}>
+                    <summary className="cursor-pointer text-sm">{cat.name}</summary>
+                    <form
+                      action={updateCategoryAction.bind(null, cat.id)}
+                      className="mt-2 flex flex-wrap gap-2"
+                    >
+                      <Input name="name" defaultValue={cat.name} required className="h-10 min-w-0 flex-1" />
+                      <Input
+                        name="sortOrder"
+                        type="number"
+                        defaultValue={cat.sortOrder}
+                        className="h-10 w-20 shrink-0"
+                        aria-label="Kolejność"
+                      />
+                      <Button type="submit" size="sm">
+                        Zapisz
+                      </Button>
+                      <Button
+                        formAction={deleteCategoryAction.bind(null, cat.id)}
+                        type="submit"
+                        variant="ghost"
+                        size="sm"
+                      >
+                        Usuń
+                      </Button>
+                    </form>
+                  </details>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <form action={createTagAction} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Input name="name" placeholder="Nowy tag" required className="h-10" />
+                  <input type="hidden" name="type" value="ingredient" />
+                  <Button type="submit" size="sm">
+                    Dodaj
+                  </Button>
+                </form>
+                {allTags
+                  .filter((entry) => entry.type === "ingredient")
+                  .map((tagEntry) => (
+                    <details key={tagEntry.id}>
+                      <summary className="cursor-pointer text-sm">{tagEntry.name}</summary>
+                      <form
+                        action={updateTagAction.bind(null, tagEntry.id)}
+                        className="mt-2 flex flex-wrap gap-2"
+                      >
+                        <Input
+                          name="name"
+                          defaultValue={tagEntry.name}
+                          required
+                          className="h-10 min-w-0 flex-1"
+                        />
+                        <input type="hidden" name="type" value={tagEntry.type} />
+                        <Button type="submit" size="sm">
+                          Zapisz
+                        </Button>
+                        <Button
+                          formAction={deleteTagAction.bind(null, tagEntry.id)}
+                          type="submit"
+                          variant="ghost"
+                          size="sm"
+                        >
+                          Usuń
+                        </Button>
+                      </form>
+                    </details>
+                  ))}
+              </div>
+            </div>
+          </details>
+        ) : null}
       </div>
     </DashboardShell>
   );
