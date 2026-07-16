@@ -31,6 +31,7 @@ import {
   assignPortionsAction,
   updateMealPlanDetailsAction,
 } from "@/modules/meal-planner/actions/meal-plan-actions";
+import { AddToSlotDialog } from "@/modules/meal-planner/components/add-to-slot-dialog";
 
 type PlanViewMode = "day" | "week";
 type SourceType = "recipe" | "ingredient" | "product";
@@ -141,6 +142,7 @@ export function MealPlanView({
   const [maxKcal, setMaxKcal] = useState("");
   const [activeDragLabel, setActiveDragLabel] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<{ date: string; mealType: MealType } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
@@ -349,6 +351,7 @@ export function MealPlanView({
             editable={editable}
             isDragging={isDragging}
             onOpenDay={(day) => go(planHref({ week: weekStart, view: "day", day }))}
+            onOpenPicker={(date, mealType) => setPickerTarget({ date, mealType })}
           />
         ) : (
           <DayDetail
@@ -359,6 +362,7 @@ export function MealPlanView({
             members={members}
             editable={editable}
             isDragging={isDragging}
+            onOpenPicker={(mealType) => setPickerTarget({ date: selectedDay, mealType })}
           />
         )}
 
@@ -372,6 +376,22 @@ export function MealPlanView({
             onMaxKcalChange={setMaxKcal}
             recipes={filteredRecipes}
             ingredients={filteredIngredients}
+          />
+        ) : null}
+
+        {editable && pickerTarget ? (
+          <AddToSlotDialog
+            open={Boolean(pickerTarget)}
+            onOpenChange={(open) => {
+              if (!open) setPickerTarget(null);
+            }}
+            date={pickerTarget.date}
+            mealType={pickerTarget.mealType}
+            recipes={recipes}
+            ingredients={ingredients}
+            onPick={async (kind, itemId, itemName) => {
+              await handleAdd(kind, itemId, pickerTarget.date, pickerTarget.mealType, itemName);
+            }}
           />
         ) : null}
 
@@ -499,6 +519,7 @@ function WeekGrid({
   editable,
   isDragging,
   onOpenDay,
+  onOpenPicker,
 }: {
   weekDays: string[];
   entries: PlanEntry[];
@@ -506,10 +527,14 @@ function WeekGrid({
   editable: boolean;
   isDragging: boolean;
   onOpenDay: (day: string) => void;
+  onOpenPicker: (date: string, mealType: MealType) => void;
 }) {
   return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[52rem] grid grid-cols-8 items-start gap-1.5">
+    <div className="overflow-x-auto pb-2">
+      <div
+        className="grid items-start gap-2"
+        style={{ gridTemplateColumns: "5.5rem repeat(7, minmax(9.5rem, 1fr))", minWidth: "74rem" }}
+      >
         <div />
         {weekDays.map((day) => (
           <button
@@ -518,7 +543,7 @@ function WeekGrid({
             className="space-y-1 rounded-md px-1 py-1 text-center hover:bg-accent"
             onClick={() => onOpenDay(day)}
           >
-            <span className="block text-xs font-medium">
+            <span className="block text-sm font-medium">
               {format(parseISO(day), "EEE d", { locale: pl })}
             </span>
             <DayMacros totals={dayTotals[day]} />
@@ -526,7 +551,9 @@ function WeekGrid({
         ))}
         {mealTypeEnum.map((mealType) => (
           <Fragment key={mealType}>
-            <div className="pt-1 text-xs text-muted-foreground">{MEAL_TYPE_LABELS[mealType]}</div>
+            <div className="pt-2 text-xs font-medium leading-snug text-muted-foreground">
+              {MEAL_TYPE_LABELS[mealType]}
+            </div>
             {weekDays.map((day) => {
               const cellEntries = entries.filter((e) => e.date === day && e.mealType === mealType);
               return (
@@ -536,6 +563,7 @@ function WeekGrid({
                   isDragging={isDragging}
                   empty={!cellEntries.length}
                   compact
+                  onAddClick={editable ? () => onOpenPicker(day, mealType) : undefined}
                 >
                   {cellEntries.map((entry) => (
                     <CompactEntryChip key={entry.id} entry={entry} editable={editable} />
@@ -558,6 +586,7 @@ function DayDetail({
   members,
   editable,
   isDragging,
+  onOpenPicker,
 }: {
   selectedDay: string;
   dayTotal?: DayTotals;
@@ -566,6 +595,7 @@ function DayDetail({
   members: Member[];
   editable: boolean;
   isDragging: boolean;
+  onOpenPicker: (mealType: MealType) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -589,8 +619,16 @@ function DayDetail({
             isDragging={isDragging}
             empty={!typeEntries.length}
             className="min-h-28"
+            onAddClick={editable ? () => onOpenPicker(mealType) : undefined}
           >
-            <p className="mb-2 text-sm font-semibold">{MEAL_TYPE_LABELS[mealType]}</p>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">{MEAL_TYPE_LABELS[mealType]}</p>
+              {editable ? (
+                <Button type="button" size="sm" variant="outline" onClick={() => onOpenPicker(mealType)}>
+                  + Dodaj
+                </Button>
+              ) : null}
+            </div>
             <div className="space-y-3">
               {typeEntries.map((entry) => (
                 <DetailedEntryCard
@@ -623,7 +661,7 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
     <div
       ref={setNodeRef}
       style={style}
-      className="group flex items-start gap-1 rounded border bg-accent/40 px-1.5 py-1 text-[11px] leading-tight"
+      className="group flex items-start gap-1 rounded border bg-accent/40 px-2 py-1.5 text-xs leading-snug"
     >
       <button
         type="button"
@@ -632,7 +670,7 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
         {...(editable ? attributes : {})}
         title={entry.itemName}
       >
-        <span className="line-clamp-2">{entry.itemName}</span>
+        <span className="break-words">{entry.itemName}</span>
       </button>
       {editable ? (
         <FeedbackForm
@@ -919,6 +957,7 @@ function DroppablePlanCell({
   empty,
   compact = false,
   className = "",
+  onAddClick,
 }: {
   id: string;
   children: React.ReactNode;
@@ -926,18 +965,19 @@ function DroppablePlanCell({
   empty: boolean;
   compact?: boolean;
   className?: string;
+  onAddClick?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <Card
       ref={setNodeRef}
-      className={`h-auto transition-colors ${compact ? "min-h-14" : "min-h-20"} ${
+      className={`h-auto transition-colors ${compact ? "min-h-16" : "min-h-20"} ${
         isOver ? "border-primary bg-accent" : ""
       } ${className}`}
     >
-      <CardContent className={`flex h-full flex-col ${compact ? "gap-1 p-1.5" : "gap-2 p-3"}`}>
+      <CardContent className={`flex h-full flex-col ${compact ? "gap-1.5 p-2" : "gap-2 p-3"}`}>
         {children}
-        {empty ? (
+        {empty && !onAddClick ? (
           <p
             className={`mt-auto text-center ${compact ? "py-2 text-[10px]" : "py-3 text-xs"} ${
               isDragging ? "text-primary" : "text-muted-foreground/70"
@@ -945,6 +985,17 @@ function DroppablePlanCell({
           >
             {isDragging ? "Upuść" : "—"}
           </p>
+        ) : null}
+        {onAddClick ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={`mt-auto w-full ${compact ? "h-7 text-[11px]" : "h-9 text-xs"} text-muted-foreground`}
+            onClick={onAddClick}
+          >
+            {isDragging ? "Upuść tutaj" : "+ Dodaj"}
+          </Button>
         ) : null}
       </CardContent>
     </Card>

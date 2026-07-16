@@ -38,6 +38,7 @@ import { AppError } from "@/lib/errors";
 import { db } from "@/db/client";
 import { categories, tags } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { getUsdaFoodDetails, UsdaError } from "@/integrations/usda";
 import { markManualNutritionUpdate } from "../services/nutrition-source";
 
 async function validateIngredientReferences(
@@ -482,4 +483,57 @@ export async function approveUsdaIngredientAction(formData: FormData) {
   revalidatePath("/ingredients");
   revalidatePath("/ingredients/usda");
   redirect("/ingredients");
+}
+
+export async function quickAddUsdaIngredientAction(formData: FormData) {
+  const { householdId, user } = await requireActiveHouseholdEditor();
+  const externalId = String(formData.get("externalId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!externalId) {
+    throw new AppError("Brak identyfikatora USDA", "VALIDATION_ERROR");
+  }
+
+  let details;
+  try {
+    details = await getUsdaFoodDetails(Number(externalId));
+  } catch (error) {
+    if (error instanceof UsdaError) {
+      throw new AppError(error.message, "VALIDATION_ERROR");
+    }
+    throw error;
+  }
+
+  const ingredientName = name || details.name;
+  await createIngredient(
+    householdId,
+    user.id,
+    {
+      name: ingredientName,
+      description: [details.description, details.foodCategory, details.dataType]
+        .filter(Boolean)
+        .join(" | ") || null,
+      categoryId: null,
+      baseUnit: "g",
+      nutritionBasis: "per100g",
+      kcalPer100: details.kcalPer100,
+      proteinPer100: details.proteinPer100,
+      carbsPer100: details.carbsPer100,
+      fatPer100: details.fatPer100,
+      fiberPer100: details.fiberPer100,
+      saltPer100: details.saltPer100,
+      densityGramsPerMl: null,
+      allergens: null,
+      dataSource: "usda",
+      externalId: details.externalId,
+      importedAt: new Date(),
+      sourceUpdatedAt: details.sourceUpdatedAt,
+      verifiedByUser: true,
+      manuallyModified: false,
+    },
+    [],
+  );
+
+  revalidatePath("/ingredients");
+  revalidatePath("/ingredients/usda");
+  revalidatePath("/plan");
 }
