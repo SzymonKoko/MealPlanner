@@ -20,6 +20,7 @@ import {
   sumNutrition,
 } from "@/lib/nutrition";
 import type { NutritionBasis } from "@/db/schema/ingredients";
+import { IngredientSourcePicker } from "./ingredient-source-picker";
 
 interface RecipeSourceOption {
   id: string;
@@ -69,6 +70,21 @@ interface RecipeIngredientRow {
   optional: boolean;
 }
 
+function unitLabel(unit: string) {
+  switch (unit) {
+    case "lyzka":
+      return "łyżka";
+    case "lyzeczka":
+      return "łyżeczka";
+    case "szklanka":
+      return "szklanka";
+    case "opakowanie":
+      return "opak.";
+    default:
+      return unit;
+  }
+}
+
 export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
   const router = useRouter();
   const [rows, setRows] = useState<RecipeIngredientRow[]>(
@@ -82,11 +98,7 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sourceSearch, setSourceSearch] = useState("");
   const [servings, setServings] = useState(initialData?.servings ?? 2);
-  const filteredSources = sources.filter((source) =>
-    source.name.toLocaleLowerCase("pl").includes(sourceSearch.toLocaleLowerCase("pl")),
-  );
   const nutritionPreview = useMemo(() => {
     let warning: string | null = null;
     const total = sumNutrition(
@@ -106,6 +118,10 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
     );
     return { values: perServing(total, servings), warning };
   }, [rows, servings, sources]);
+
+  function updateRow(index: number, patch: Partial<RecipeIngredientRow>) {
+    setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -160,67 +176,89 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>{initialData ? "Edytuj przepis" : "Nowy przepis"}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
+        <CardContent className="space-y-3">
+          <div className="space-y-1">
             <Label htmlFor="name">Nazwa</Label>
-            <Input id="name" name="name" defaultValue={initialData?.name} required />
+            <Input id="name" name="name" className="h-9" defaultValue={initialData?.name} required />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="description">Opis</Label>
             <textarea
               id="description"
               name="description"
               defaultValue={initialData?.description ?? ""}
-              className="flex min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+              className="flex min-h-16 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="servings">Liczba porcji</Label>
+            <div className="space-y-1">
+              <Label htmlFor="servings">Porcje</Label>
               <Input
                 id="servings"
                 name="servings"
                 type="number"
                 min={1}
+                className="h-9"
                 value={servings}
                 onChange={(event) => setServings(Math.max(1, Number(event.target.value) || 1))}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="prepTimeMinutes">Przygotowanie (min)</Label>
-              <Input id="prepTimeMinutes" name="prepTimeMinutes" type="number" min={0} defaultValue={initialData?.prepTimeMinutes ?? ""} />
+              <Input
+                id="prepTimeMinutes"
+                name="prepTimeMinutes"
+                type="number"
+                min={0}
+                className="h-9"
+                defaultValue={initialData?.prepTimeMinutes ?? ""}
+              />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="cookTimeMinutes">Gotowanie (min)</Label>
-              <Input id="cookTimeMinutes" name="cookTimeMinutes" type="number" min={0} defaultValue={initialData?.cookTimeMinutes ?? ""} />
+              <Input
+                id="cookTimeMinutes"
+                name="cookTimeMinutes"
+                type="number"
+                min={0}
+                className="h-9"
+                defaultValue={initialData?.cookTimeMinutes ?? ""}
+              />
             </div>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="instructions">Instrukcja</Label>
             <textarea
               id="instructions"
               name="instructions"
               defaultValue={initialData?.instructions ?? ""}
-              className="flex min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+              className="flex min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="image">Zdjęcie</Label>
-            <Input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp" />
-            {initialData?.imageUrl ? <p className="text-xs text-muted-foreground">Obecne zdjęcie zostanie zachowane, jeśli nie wybierzesz nowego.</p> : null}
+            <Input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp" className="h-9" />
+            {initialData?.imageUrl ? (
+              <p className="text-xs text-muted-foreground">Obecne zdjęcie zostanie zachowane, jeśli nie wybierzesz nowego.</p>
+            ) : null}
           </div>
           {tags.length ? (
-            <fieldset className="space-y-2">
+            <fieldset className="space-y-1">
               <legend className="text-sm font-medium">Tagi</legend>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {tags.map((tag) => (
-                  <label key={tag.id} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" name="tagIds" value={tag.id} defaultChecked={initialData?.tagIds.includes(tag.id)} />
+                  <label key={tag.id} className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="checkbox"
+                      name="tagIds"
+                      value={tag.id}
+                      defaultChecked={initialData?.tagIds.includes(tag.id)}
+                    />
                     {tag.name}
                   </label>
                 ))}
@@ -231,129 +269,105 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
           <CardTitle>Składniki</CardTitle>
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link href="/ingredients">Nowy składnik</Link>
+          </Button>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Input
-              value={sourceSearch}
-              onChange={(event) => setSourceSearch(event.target.value)}
-              placeholder="Szukaj składnika lub produktu"
-              className="min-w-48 flex-1"
-            />
-            <Button asChild type="button" variant="outline">
-              <Link href="/ingredients">Dodaj nowy składnik</Link>
-            </Button>
+        <CardContent className="space-y-2">
+          <div className="hidden gap-2 px-1 text-xs text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_auto]">
+            <span>Nazwa</span>
+            <span>Ilość</span>
+            <span>Jednostka</span>
+            <span className="w-28 text-center">Opcj.</span>
           </div>
           {rows.map((row, index) => (
-            <div key={index} className="flex flex-wrap items-center gap-2">
-              <select
-                className="h-11 flex-1 min-w-32 rounded-lg border border-input bg-background px-3 text-sm"
-                value={`${row.sourceType}:${row.sourceId}`}
-                onChange={(e) => {
-                  const next = [...rows];
-                  const [sourceType, sourceId] = e.target.value.split(":") as ["ingredient" | "product", string];
-                  next[index] = { ...next[index], sourceType, sourceId };
-                  setRows(next);
-                }}
-                required
-              >
-                <option value="ingredient:">Wybierz składnik lub produkt</option>
-                {sources
-                  .filter((source) => filteredSources.includes(source) || source.id === row.sourceId)
-                  .map((source) => (
-                  <option key={`${source.type}:${source.id}`} value={`${source.type}:${source.id}`}>
-                    {source.type === "product" ? "Produkt: " : ""}{source.name}
-                  </option>
-                  ))}
-              </select>
+            <div
+              key={index}
+              className="grid grid-cols-1 gap-2 rounded-lg border p-2 sm:grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_auto] sm:items-center sm:border-0 sm:p-0"
+            >
+              <IngredientSourcePicker
+                sources={sources}
+                value={{ sourceId: row.sourceId, sourceType: row.sourceType }}
+                onChange={(next) => updateRow(index, next)}
+              />
               <Input
-                className="w-24"
+                className="h-9 w-full sm:w-auto"
                 value={row.quantity}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[index] = { ...next[index], quantity: e.target.value };
-                  setRows(next);
-                }}
+                inputMode="decimal"
+                aria-label="Ilość"
+                onChange={(e) => updateRow(index, { quantity: e.target.value })}
               />
               <select
-                className="h-11 w-20 rounded-lg border border-input bg-background px-2 text-sm"
+                className="h-9 w-full rounded-lg border border-input bg-background px-2 text-sm sm:w-auto"
                 value={row.unit}
-                onChange={(e) => {
-                  const next = [...rows];
-                  next[index] = { ...next[index], unit: e.target.value };
-                  setRows(next);
-                }}
+                aria-label="Jednostka"
+                onChange={(e) => updateRow(index, { unit: e.target.value })}
               >
                 {RECIPE_SUPPORTED_UNITS.map((u) => (
                   <option key={u} value={u}>
-                    {u === "lyzka"
-                      ? "łyżka"
-                      : u === "lyzeczka"
-                        ? "łyżeczka"
-                        : u === "szklanka"
-                          ? "szklanka"
-                          : u === "opakowanie"
-                            ? "opakowanie"
-                            : u}
+                    {unitLabel(u)}
                   </option>
                 ))}
               </select>
-              <label className="flex min-h-11 items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={row.optional}
-                  onChange={(e) => {
+              <div className="flex items-center justify-between gap-1 sm:w-28 sm:justify-end">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={row.optional}
+                    onChange={(e) => updateRow(index, { optional: e.target.checked })}
+                  />
+                  opc.
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                  disabled={index === 0}
+                  onClick={() => {
                     const next = [...rows];
-                    next[index] = { ...next[index], optional: e.target.checked };
+                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
                     setRows(next);
                   }}
-                />
-                Opcjonalny
-              </label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setRows(rows.filter((_, rowIndex) => rowIndex !== index))}
-                disabled={rows.length === 1}
-              >
-                Usuń
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={index === 0}
-                onClick={() => {
-                  const next = [...rows];
-                  [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                  setRows(next);
-                }}
-              >
-                ↑
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={index === rows.length - 1}
-                onClick={() => {
-                  const next = [...rows];
-                  [next[index], next[index + 1]] = [next[index + 1], next[index]];
-                  setRows(next);
-                }}
-              >
-                ↓
-              </Button>
+                >
+                  ↑
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                  disabled={index === rows.length - 1}
+                  onClick={() => {
+                    const next = [...rows];
+                    [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                    setRows(next);
+                  }}
+                >
+                  ↓
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-destructive"
+                  onClick={() => setRows(rows.filter((_, rowIndex) => rowIndex !== index))}
+                  disabled={rows.length === 1}
+                >
+                  ×
+                </Button>
+              </div>
             </div>
           ))}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setRows([...rows, { sourceId: "", sourceType: "ingredient", quantity: "100", unit: "g", optional: false }])}
+            onClick={() =>
+              setRows([...rows, { sourceId: "", sourceType: "ingredient", quantity: "100", unit: "g", optional: false }])
+            }
           >
             + Składnik
           </Button>
@@ -361,22 +375,26 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Makro na porcję — podgląd</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Makro / porcję</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           <span>{Math.round(nutritionPreview.values.kcal)} kcal</span>
-          <span>B: {nutritionPreview.values.protein.toFixed(1)} g</span>
-          <span>W: {nutritionPreview.values.carbs.toFixed(1)} g</span>
-          <span>T: {nutritionPreview.values.fat.toFixed(1)} g</span>
-          <span>Bł: {nutritionPreview.values.fiber.toFixed(1)} g</span>
-          <span>Sól: {nutritionPreview.values.salt.toFixed(2)} g</span>
+          <span>B {nutritionPreview.values.protein.toFixed(1)}</span>
+          <span>W {nutritionPreview.values.carbs.toFixed(1)}</span>
+          <span>T {nutritionPreview.values.fat.toFixed(1)}</span>
+          <span>Bł {nutritionPreview.values.fiber.toFixed(1)}</span>
+          <span>Sól {nutritionPreview.values.salt.toFixed(2)}</span>
           {nutritionPreview.warning ? (
-            <p className="col-span-full text-destructive">{nutritionPreview.warning}</p>
+            <p className="w-full text-destructive">{nutritionPreview.warning}</p>
           ) : null}
         </CardContent>
       </Card>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <Button type="submit" disabled={pending}>{pending ? "Zapisywanie..." : "Zapisz przepis"}</Button>
+      <Button type="submit" disabled={pending}>
+        {pending ? "Zapisywanie..." : "Zapisz przepis"}
+      </Button>
     </form>
   );
 }
