@@ -119,7 +119,7 @@ export function UsdaIngredientImportFlow({
       formData.set("name", query.trim() || result.name);
       await quickAddUsdaIngredientAction(formData);
       toast.success(`Dodano „${query.trim() || result.name}” do składników`);
-      router.refresh();
+      router.push("/ingredients");
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Nie udało się dodać składnika";
       setError(message);

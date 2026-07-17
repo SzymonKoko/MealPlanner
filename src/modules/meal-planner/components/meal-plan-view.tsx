@@ -51,6 +51,10 @@ interface PlanEntry {
   unit: string | null;
   notes: string | null;
   isBatchCooking: boolean;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
 }
 
 interface Assignment {
@@ -207,6 +211,7 @@ export function MealPlanView({
     mealType: MealType,
     itemName: string,
     quantity?: number,
+    unit?: string,
   ) {
     const formData = new FormData();
     if (kind === "recipe") formData.set("recipeId", itemId);
@@ -218,7 +223,7 @@ export function MealPlanView({
       formData.set("servings", "1");
     } else {
       formData.set("quantity", String(quantity ?? 100));
-      formData.set("unit", "g");
+      formData.set("unit", unit ?? "g");
       formData.set("servings", "1");
     }
     setError(null);
@@ -416,8 +421,8 @@ export function MealPlanView({
             mealType={pickerTarget.mealType}
             recipes={recipes}
             ingredients={ingredients}
-            onPick={async (kind, itemId, itemName, quantity) => {
-              await handleAdd(kind, itemId, pickerTarget.date, pickerTarget.mealType, itemName, quantity);
+            onPick={async (kind, itemId, itemName, quantity, unit) => {
+              await handleAdd(kind, itemId, pickerTarget.date, pickerTarget.mealType, itemName, quantity, unit);
             }}
           />
         ) : null}
@@ -429,7 +434,7 @@ export function MealPlanView({
               if (!open) setQuantityPrompt(null);
             }}
             itemName={quantityPrompt.itemName}
-            onConfirm={async (quantity) => {
+            onConfirm={async (quantity, unit) => {
               const prompt = quantityPrompt;
               setQuantityPrompt(null);
               await handleAdd(
@@ -439,6 +444,7 @@ export function MealPlanView({
                 prompt.mealType,
                 prompt.itemName,
                 quantity,
+                unit,
               );
             }}
           />
@@ -712,15 +718,22 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
       style={style}
       className="group flex items-start gap-1 rounded border bg-accent/40 px-2 py-1.5 text-xs leading-snug"
     >
-      <button
-        type="button"
-        className={editable ? "min-w-0 flex-1 cursor-grab touch-none text-left font-medium" : "min-w-0 flex-1 text-left font-medium"}
-        {...(editable ? listeners : {})}
-        {...(editable ? attributes : {})}
-        title={entry.itemName}
-      >
-        <span className="break-words">{entry.itemName}</span>
-      </button>
+      <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          className={editable ? "cursor-grab touch-none text-left font-medium" : "text-left font-medium"}
+          {...(editable ? listeners : {})}
+          {...(editable ? attributes : {})}
+          title={entry.itemName}
+        >
+          <span className="break-words">{entry.itemName}</span>
+        </button>
+        {entry.kcal > 0 ? (
+          <span className="block text-[10px] tabular-nums text-muted-foreground">
+            {Math.round(entry.kcal)} · B{Math.round(entry.protein)} W{Math.round(entry.carbs)} T{Math.round(entry.fat)}
+          </span>
+        ) : null}
+      </div>
       {editable ? (
         <FeedbackForm
           action={deleteMealPlanEntryAction.bind(null, entry.id)}
@@ -810,6 +823,12 @@ function DetailedEntryCard({
         </span>
         {entry.isBatchCooking ? <span>Gotowanie na kilka dni</span> : null}
       </div>
+
+      {entry.kcal > 0 ? (
+        <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+          {Math.round(entry.kcal)} kcal · B {Math.round(entry.protein)} · W {Math.round(entry.carbs)} · T {Math.round(entry.fat)}
+        </p>
+      ) : null}
 
       {entry.notes ? <p className="mt-2 text-sm">{entry.notes}</p> : null}
 

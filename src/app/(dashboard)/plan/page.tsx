@@ -14,6 +14,7 @@ import { addDays, format, parseISO } from "date-fns";
 import {
   getRecipesKcalPerServing,
   sumPlannedNutritionByDate,
+  calculateNutritionPerEntry,
 } from "@/modules/nutrition/services/planned-nutrition";
 import { EMPTY_NUTRITION } from "@/lib/nutrition";
 
@@ -51,23 +52,24 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     getHouseholdMembers(householdId),
   ]);
 
-  const [recipeKcal, dayNutrition] = await Promise.all([
+  const entryNutritionSources = plan.entries.map((e) => ({
+    id: e.entry.id,
+    recipeId: e.entry.recipeId,
+    ingredientId: e.entry.ingredientId,
+    productId: e.entry.productId,
+    servings: e.entry.servings,
+    quantity: e.entry.quantity,
+    unit: e.entry.unit,
+    date: e.entry.date,
+  }));
+
+  const [recipeKcal, dayNutrition, entryNutrition] = await Promise.all([
     getRecipesKcalPerServing(
       householdId,
       recipes.map((recipe) => recipe.id),
     ),
-    sumPlannedNutritionByDate(
-      householdId,
-      plan.entries.map((e) => ({
-        recipeId: e.entry.recipeId,
-        ingredientId: e.entry.ingredientId,
-        productId: e.entry.productId,
-        servings: e.entry.servings,
-        quantity: e.entry.quantity,
-        unit: e.entry.unit,
-        date: e.entry.date,
-      })),
-    ),
+    sumPlannedNutritionByDate(householdId, entryNutritionSources),
+    calculateNutritionPerEntry(householdId, entryNutritionSources),
   ]);
 
   const weekDays = Array.from({ length: 7 }, (_, i) =>
@@ -86,21 +88,28 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     ]),
   );
 
-  const entries = plan.entries.map((e) => ({
-    id: e.entry.id,
-    recipeId: e.entry.recipeId,
-    ingredientId: e.entry.ingredientId,
-    productId: e.entry.productId,
-    itemName: e.itemName,
-    sourceType: e.sourceType,
-    date: e.entry.date,
-    mealType: e.entry.mealType,
-    servings: e.entry.servings,
-    quantity: e.entry.quantity != null ? Number.parseFloat(String(e.entry.quantity)) : null,
-    unit: e.entry.unit,
-    notes: e.entry.notes,
-    isBatchCooking: e.entry.isBatchCooking,
-  }));
+  const entries = plan.entries.map((e) => {
+    const n = entryNutrition[e.entry.id];
+    return {
+      id: e.entry.id,
+      recipeId: e.entry.recipeId,
+      ingredientId: e.entry.ingredientId,
+      productId: e.entry.productId,
+      itemName: e.itemName,
+      sourceType: e.sourceType,
+      date: e.entry.date,
+      mealType: e.entry.mealType,
+      servings: e.entry.servings,
+      quantity: e.entry.quantity != null ? Number.parseFloat(String(e.entry.quantity)) : null,
+      unit: e.entry.unit,
+      notes: e.entry.notes,
+      isBatchCooking: e.entry.isBatchCooking,
+      kcal: n?.kcal ?? 0,
+      protein: n?.protein ?? 0,
+      carbs: n?.carbs ?? 0,
+      fat: n?.fat ?? 0,
+    };
+  });
 
   const assignments = plan.assignments.map((a) => ({
     mealPlanEntryId: a.assignment.mealPlanEntryId,
