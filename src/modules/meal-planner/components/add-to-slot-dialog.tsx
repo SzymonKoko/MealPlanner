@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { MEAL_TYPE_LABELS } from "@/lib/meal-types";
 import type { MealType } from "@/db/schema/meal-planner";
+import { toast } from "sonner";
+import { quickCreateIngredientAction } from "@/modules/ingredients/actions/ingredient-actions";
 
 type SourceType = "recipe" | "ingredient" | "product";
 
@@ -153,6 +155,12 @@ export function AddToSlotDialog({
   const [query, setQuery] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [quantityItem, setQuantityItem] = useState<SlotPickerItem | null>(null);
+  const [showCreateIngredient, setShowCreateIngredient] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newKcal, setNewKcal] = useState("");
+  const [newProtein, setNewProtein] = useState("");
+  const [newCarbs, setNewCarbs] = useState("");
+  const [newFat, setNewFat] = useState("");
   const [quantity, setQuantity] = useState("100");
   const [unit, setUnit] = useState("g");
 
@@ -171,8 +179,47 @@ export function AddToSlotDialog({
   function reset() {
     setQuery("");
     setQuantityItem(null);
+    setShowCreateIngredient(false);
+    setNewName("");
+    setNewKcal("");
+    setNewProtein("");
+    setNewCarbs("");
+    setNewFat("");
     setQuantity("100");
     setUnit("g");
+  }
+
+  function openCreateIngredient() {
+    setShowCreateIngredient(true);
+    setNewName(query.trim());
+  }
+
+  async function handleCreateIngredient(event: React.FormEvent) {
+    event.preventDefault();
+    if (!newName.trim()) return;
+    setPendingId("create-ingredient");
+    try {
+      const formData = new FormData();
+      formData.set("name", newName.trim());
+      if (newKcal.trim()) formData.set("kcalPer100", newKcal.trim());
+      if (newProtein.trim()) formData.set("proteinPer100", newProtein.trim());
+      if (newCarbs.trim()) formData.set("carbsPer100", newCarbs.trim());
+      if (newFat.trim()) formData.set("fatPer100", newFat.trim());
+      const created = await quickCreateIngredientAction(formData);
+      toast.success(`Dodano składnik „${created.name}"`);
+      setQuantityItem({
+        id: created.id,
+        name: created.name,
+        kind: "ingredient",
+        kcalLabel: newKcal.trim() ? `${Math.round(Number.parseFloat(newKcal.replace(",", ".")))} / 100g` : null,
+      });
+      setShowCreateIngredient(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Nie udało się dodać składnika";
+      toast.error(message);
+    } finally {
+      setPendingId(null);
+    }
   }
 
   async function handlePick(item: SlotPickerItem) {
@@ -216,11 +263,15 @@ export function AddToSlotDialog({
       <DialogContent>
         <DialogHeader className="flex items-start justify-between gap-2">
           <div>
-            <DialogTitle>{quantityItem ? "Ilość" : "Dodaj posiłek"}</DialogTitle>
+            <DialogTitle>
+              {quantityItem ? "Ilość" : showCreateIngredient ? "Nowy składnik" : "Dodaj posiłek"}
+            </DialogTitle>
             <p className="mt-1 text-xs text-muted-foreground">
               {quantityItem
                 ? quantityItem.name
-                : `${date} · ${MEAL_TYPE_LABELS[mealType]}`}
+                : showCreateIngredient
+                  ? `${date} · ${MEAL_TYPE_LABELS[mealType]}`
+                  : `${date} · ${MEAL_TYPE_LABELS[mealType]}`}
             </p>
           </div>
           <DialogClose asChild>
@@ -268,6 +319,77 @@ export function AddToSlotDialog({
                 </Button>
               </div>
             </form>
+          ) : showCreateIngredient ? (
+            <form onSubmit={(event) => void handleCreateIngredient(event)} className="space-y-4">
+              <label className="block space-y-1 text-sm">
+                <span className="text-muted-foreground">Nazwa składnika</span>
+                <Input
+                  value={newName}
+                  onChange={(event) => setNewName(event.target.value)}
+                  placeholder="np. banan, skyr"
+                  autoFocus
+                  required
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block space-y-1 text-sm">
+                  <span className="text-muted-foreground">kcal / 100g</span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    value={newKcal}
+                    onChange={(event) => setNewKcal(event.target.value)}
+                    placeholder="opcjonalnie"
+                  />
+                </label>
+                <label className="block space-y-1 text-sm">
+                  <span className="text-muted-foreground">Białko / 100g</span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    value={newProtein}
+                    onChange={(event) => setNewProtein(event.target.value)}
+                    placeholder="opcjonalnie"
+                  />
+                </label>
+                <label className="block space-y-1 text-sm">
+                  <span className="text-muted-foreground">Węgle / 100g</span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    value={newCarbs}
+                    onChange={(event) => setNewCarbs(event.target.value)}
+                    placeholder="opcjonalnie"
+                  />
+                </label>
+                <label className="block space-y-1 text-sm">
+                  <span className="text-muted-foreground">Tłuszcz / 100g</span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    value={newFat}
+                    onChange={(event) => setNewFat(event.target.value)}
+                    placeholder="opcjonalnie"
+                  />
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowCreateIngredient(false)}>
+                  Wstecz
+                </Button>
+                <Button type="submit" className="flex-1" disabled={pendingId !== null}>
+                  {pendingId ? "Zapisuję…" : "Zapisz i wybierz ilość"}
+                </Button>
+              </div>
+            </form>
           ) : (
             <>
               <Input
@@ -306,7 +428,12 @@ export function AddToSlotDialog({
               </section>
 
               <section className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Składniki</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Składniki</p>
+                  <Button type="button" variant="outline" size="sm" onClick={openCreateIngredient}>
+                    + Nowy składnik
+                  </Button>
+                </div>
                 {filteredIngredients.length ? (
                   <div className="space-y-1">
                     {filteredIngredients.map((item) => (
@@ -327,6 +454,13 @@ export function AddToSlotDialog({
                         </span>
                       </button>
                     ))}
+                  </div>
+                ) : query.trim() ? (
+                  <div className="space-y-2 rounded-lg border border-dashed p-3">
+                    <p className="text-sm text-muted-foreground">Brak wyników dla „{query.trim()}”.</p>
+                    <Button type="button" variant="secondary" size="sm" onClick={openCreateIngredient}>
+                      Dodaj „{query.trim()}” jako składnik
+                    </Button>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Brak składników.</p>

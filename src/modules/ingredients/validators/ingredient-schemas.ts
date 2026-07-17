@@ -63,6 +63,14 @@ export const ingredientCreateSchema = ingredientFields.merge(nutritionValuesSche
 export const ingredientUpdateSchema = ingredientCreateSchema;
 export const ingredientSchema = ingredientCreateSchema;
 
+export const quickIngredientCreateSchema = z.object({
+  name: z.string().min(1, "Podaj nazwę składnika").max(200),
+  kcalPer100: optionalNonNegativeDecimal,
+  proteinPer100: optionalNonNegativeDecimal,
+  carbsPer100: optionalNonNegativeDecimal,
+  fatPer100: optionalNonNegativeDecimal,
+});
+
 const productFields = z.object({
   ingredientId: z.string().uuid().optional().nullable(),
   name: z.string().min(1).max(200),
