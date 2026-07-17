@@ -19,6 +19,7 @@ export const mealPlanEntrySchema = z
     quantity: z.coerce.number().positive().optional(),
     unit: z.string().max(20).optional(),
     notes: z.string().max(500).optional(),
+    planScope: z.enum(["mine", "household"]).default("mine"),
   })
   .superRefine((data, ctx) => {
     const sources = [data.recipeId, data.ingredientId, data.productId].filter(Boolean);
@@ -45,11 +46,22 @@ export const moveMealPlanEntrySchema = z.object({
   mealType: z.enum(mealTypeEnum),
 });
 
-export const assignmentSchema = z.object({
-  mealPlanEntryId: z.string().uuid(),
-  userId: z.string().uuid(),
-  servings: z.coerce.number().int().min(0),
-});
+export const splitMealPlanEntrySchema = z.discriminatedUnion("mode", [
+  z.object({
+    entryId: z.string().uuid(),
+    mode: z.literal("equal"),
+    userIds: z.array(z.string().uuid()).min(1),
+  }),
+  z.object({
+    entryId: z.string().uuid(),
+    mode: z.literal("percentage"),
+    allocations: z.array(z.object({
+      userId: z.string().uuid(),
+      percentage: z.number().positive().max(100),
+    })).min(1),
+  }),
+  z.object({ entryId: z.string().uuid(), mode: z.literal("clear") }),
+]);
 
 export const mealPlanDetailsSchema = z.object({
   entryId: z.string().uuid(),

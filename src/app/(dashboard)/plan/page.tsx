@@ -13,7 +13,6 @@ import { canEdit } from "@/modules/households/services/role-checks";
 import { addDays, format, parseISO } from "date-fns";
 import {
   getRecipesKcalPerServing,
-  sumPlannedNutritionByDate,
   calculateNutritionPerEntry,
 } from "@/modules/nutrition/services/planned-nutrition";
 import { mealTypeEnum } from "@/lib/meal-types";
@@ -21,12 +20,13 @@ import type { MealType } from "@/db/schema/meal-planner";
 import { EMPTY_NUTRITION } from "@/lib/nutrition";
 
 interface PlanPageProps {
-  searchParams: Promise<{ week?: string; view?: string; day?: string; pick?: string }>;
+  searchParams: Promise<{ week?: string; view?: string; day?: string; pick?: string; scope?: string }>;
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
-  const { householdId, role } = await requireActiveHouseholdOrRedirect();
+  const { householdId, role, user } = await requireActiveHouseholdOrRedirect();
   const params = await searchParams;
+  const scope = params.scope === "household" ? "household" : "mine";
 
   const today = formatDateISO(new Date());
   const view = params.view === "week" ? "week" : "day";
@@ -54,7 +54,16 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     getHouseholdMembers(householdId),
   ]);
 
-  const entryNutritionSources = plan.entries.map((e) => ({
+  const shareByEntryId = new Map(
+    plan.assignments
+      .filter((row) => row.assignment.userId === user.id)
+      .map((row) => [row.assignment.mealPlanEntryId, Number.parseFloat(row.assignment.share)]),
+  );
+  const visiblePlanEntries = scope === "mine"
+    ? plan.entries.filter((row) => shareByEntryId.has(row.entry.id))
+    : plan.entries;
+
+  const entryNutritionSources = visiblePlanEntries.map((e) => ({
     id: e.entry.id,
     recipeId: e.entry.recipeId,
     ingredientId: e.entry.ingredientId,
@@ -65,33 +74,53 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     date: e.entry.date,
   }));
 
-  const [recipeKcal, dayNutrition, entryNutrition] = await Promise.all([
+  const [recipeKcal, entryNutrition] = await Promise.all([
     getRecipesKcalPerServing(
       householdId,
       recipes.map((recipe) => recipe.id),
     ),
-    sumPlannedNutritionByDate(householdId, entryNutritionSources),
     calculateNutritionPerEntry(householdId, entryNutritionSources),
   ]);
 
   const weekDays = Array.from({ length: 7 }, (_, i) =>
     format(addDays(parseISO(weekStart), i), "yyyy-MM-dd"),
   );
+  const personalDayNutrition = Object.fromEntries(weekDays.map((day) => {
+    const totals = visiblePlanEntries.filter((row) => row.entry.date === day).reduce(
+      (sum, row) => {
+        const nutrition = entryNutrition[row.entry.id] ?? EMPTY_NUTRITION;
+        const factor = scope === "mine" ? (shareByEntryId.get(row.entry.id) ?? 0) : 1;
+        return {
+          kcal: sum.kcal + nutrition.kcal * factor,
+          protein: sum.protein + nutrition.protein * factor,
+          carbs: sum.carbs + nutrition.carbs * factor,
+          fat: sum.fat + nutrition.fat * factor,
+          fiber: sum.fiber + nutrition.fiber * factor,
+        };
+      },
+      { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
+    );
+    return [day, totals];
+  }));
   const dayTotals = Object.fromEntries(
     weekDays.map((day) => [
       day,
       {
-        kcal: dayNutrition[day]?.kcal ?? 0,
-        protein: dayNutrition[day]?.protein ?? 0,
-        carbs: dayNutrition[day]?.carbs ?? 0,
-        fat: dayNutrition[day]?.fat ?? 0,
-        fiber: dayNutrition[day]?.fiber ?? EMPTY_NUTRITION.fiber,
+        kcal: personalDayNutrition[day]?.kcal ?? 0,
+        protein: personalDayNutrition[day]?.protein ?? 0,
+        carbs: personalDayNutrition[day]?.carbs ?? 0,
+        fat: personalDayNutrition[day]?.fat ?? 0,
+        fiber: personalDayNutrition[day]?.fiber ?? EMPTY_NUTRITION.fiber,
       },
     ]),
   );
 
-  const entries = plan.entries.map((e) => {
+  const entries = visiblePlanEntries.map((e) => {
     const n = entryNutrition[e.entry.id];
+    const factor = scope === "mine" ? (shareByEntryId.get(e.entry.id) ?? 0) : 1;
+    const entryAssignments = plan.assignments.filter(
+      (row) => row.assignment.mealPlanEntryId === e.entry.id,
+    );
     return {
       id: e.entry.id,
       recipeId: e.entry.recipeId,
@@ -101,15 +130,20 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       sourceType: e.sourceType,
       date: e.entry.date,
       mealType: e.entry.mealType,
-      servings: e.entry.servings,
-      quantity: e.entry.quantity != null ? Number.parseFloat(String(e.entry.quantity)) : null,
+      servings: e.entry.servings * factor,
+      quantity: e.entry.quantity != null ? Number.parseFloat(String(e.entry.quantity)) * factor : null,
       unit: e.entry.unit,
       notes: e.entry.notes,
       isBatchCooking: e.entry.isBatchCooking,
-      kcal: n?.kcal ?? 0,
-      protein: n?.protein ?? 0,
-      carbs: n?.carbs ?? 0,
-      fat: n?.fat ?? 0,
+      kcal: (n?.kcal ?? 0) * factor,
+      protein: (n?.protein ?? 0) * factor,
+      carbs: (n?.carbs ?? 0) * factor,
+      fat: (n?.fat ?? 0) * factor,
+      editable: scope === "household" || (
+        entryAssignments.length === 1 &&
+        entryAssignments[0].assignment.userId === user.id &&
+        Number.parseFloat(entryAssignments[0].assignment.share) === 1
+      ),
     };
   });
 
@@ -117,7 +151,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     mealPlanEntryId: a.assignment.mealPlanEntryId,
     userId: a.assignment.userId,
     displayName: a.displayName,
-    servings: a.assignment.servings,
+    share: Number.parseFloat(a.assignment.share),
   }));
 
   const catalogIngredients = [
@@ -153,6 +187,8 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         <h1 className="text-2xl font-bold">Plan posiłków</h1>
         <MealPlanView
           weekStart={weekStart}
+          scope={scope}
+          currentUserId={user.id}
           selectedDay={selectedDay}
           view={view}
           entries={entries}

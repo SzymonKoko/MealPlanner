@@ -1,28 +1,46 @@
 import { describe, expect, it } from "vitest";
 import {
-  canSetAssignment,
-  totalAssignedServings,
+  equalShares,
+  percentageAllocationsToShares,
+  personalAmount,
+  validateShares,
 } from "./portion-allocation";
 
-const assignments = [
-  { userId: "user-1", servings: 2 },
-  { userId: "user-2", servings: 1 },
-];
-
-describe("portion allocation", () => {
-  it("counts assigned servings", () => {
-    expect(totalAssignedServings(assignments)).toBe(3);
+describe("meal plan shares", () => {
+  it("splits an entry equally between two distinct people", () => {
+    expect(equalShares(["user-1", "user-2"])).toEqual([
+      { userId: "user-1", share: 0.5 },
+      { userId: "user-2", share: 0.5 },
+    ]);
   });
 
-  it("allows replacing the selected user's allocation", () => {
-    expect(canSetAssignment(4, assignments, "user-1", 3)).toBe(true);
+  it("converts a custom 65/35 percentage split to shares", () => {
+    expect(
+      percentageAllocationsToShares([
+        { userId: "user-1", percentage: 65 },
+        { userId: "user-2", percentage: 35 },
+      ]),
+    ).toEqual([
+      { userId: "user-1", share: 0.65 },
+      { userId: "user-2", share: 0.35 },
+    ]);
   });
 
-  it("rejects an allocation above total meal servings", () => {
-    expect(canSetAssignment(3, assignments, "user-1", 3)).toBe(false);
+  it("keeps a 65/35 split when total servings change from 4 to 6", () => {
+    expect(personalAmount(6, 0.65)).toBeCloseTo(3.9);
+    expect(personalAmount(6, 0.35)).toBeCloseTo(2.1);
   });
 
-  it("allows removing an assignment", () => {
-    expect(canSetAssignment(3, assignments, "user-1", 0)).toBe(true);
+  it("rejects duplicate people and totals other than 100%", () => {
+    expect(() =>
+      validateShares([
+        { userId: "user-1", share: 0.5 },
+        { userId: "user-1", share: 0.5 },
+      ]),
+    ).toThrow("Każdy domownik może wystąpić tylko raz");
+
+    expect(() => validateShares([{ userId: "user-1", share: 0.65 }])).toThrow(
+      "Suma udziałów musi wynosić 100%",
+    );
   });
 });
