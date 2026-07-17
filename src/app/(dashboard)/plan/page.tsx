@@ -16,10 +16,12 @@ import {
   sumPlannedNutritionByDate,
   calculateNutritionPerEntry,
 } from "@/modules/nutrition/services/planned-nutrition";
+import { mealTypeEnum } from "@/lib/meal-types";
+import type { MealType } from "@/db/schema/meal-planner";
 import { EMPTY_NUTRITION } from "@/lib/nutrition";
 
 interface PlanPageProps {
-  searchParams: Promise<{ week?: string; view?: string; day?: string }>;
+  searchParams: Promise<{ week?: string; view?: string; day?: string; pick?: string }>;
 }
 
 export default async function PlanPage({ searchParams }: PlanPageProps) {
@@ -139,6 +141,12 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     })),
   ].sort((a, b) => a.name.localeCompare(b.name, "pl"));
 
+  const pickMealType =
+    params.pick && (mealTypeEnum as readonly string[]).includes(params.pick)
+      ? (params.pick as MealType)
+      : null;
+  const editable = canEdit(role);
+
   return (
     <DashboardShell>
       <div className="space-y-4">
@@ -162,7 +170,10 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           })}
           ingredients={catalogIngredients}
           members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
-          editable={canEdit(role)}
+          editable={editable}
+          initialPick={
+            pickMealType && editable ? { date: selectedDay, mealType: pickMealType } : null
+          }
         />
       </div>
     </DashboardShell>

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { sanitizePlanReturnTo } from "@/lib/return-to";
 import {
   requireActiveHousehold,
   requireActiveHouseholdEditor,
@@ -483,7 +484,8 @@ export async function approveUsdaIngredientAction(formData: FormData) {
 
   revalidatePath("/ingredients");
   revalidatePath("/ingredients/usda");
-  redirect("/ingredients");
+  const returnTo = sanitizePlanReturnTo(String(formData.get("returnTo") ?? ""));
+  redirect(returnTo ?? "/ingredients");
 }
 
 export async function quickAddUsdaIngredientAction(formData: FormData) {
@@ -505,7 +507,7 @@ export async function quickAddUsdaIngredientAction(formData: FormData) {
   }
 
   const ingredientName = name || details.name;
-  await createIngredient(
+  const ingredient = await createIngredient(
     householdId,
     user.id,
     {
@@ -537,6 +539,12 @@ export async function quickAddUsdaIngredientAction(formData: FormData) {
   revalidatePath("/ingredients");
   revalidatePath("/ingredients/usda");
   revalidatePath("/plan");
+
+  return {
+    id: ingredient.id,
+    name: ingredient.name,
+    kcalPer100: details.kcalPer100,
+  };
 }
 
 export async function quickCreateIngredientAction(formData: FormData) {
@@ -575,5 +583,5 @@ export async function quickCreateIngredientAction(formData: FormData) {
   revalidatePath("/ingredients");
   revalidatePath("/plan");
 
-  return { id: ingredient.id, name: ingredient.name };
+  return { id: ingredient.id, name: ingredient.name, kcalPer100: parsed.data.kcalPer100 ?? null };
 }

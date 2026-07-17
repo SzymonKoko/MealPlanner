@@ -98,6 +98,7 @@ interface MealPlanViewProps {
   ingredients: PaletteItem[];
   members: Member[];
   editable: boolean;
+  initialPick?: { date: string; mealType: MealType } | null;
 }
 
 function parseDropId(id: string): { date: string; mealType: MealType } | null {
@@ -157,6 +158,7 @@ export function MealPlanView({
   ingredients,
   members,
   editable,
+  initialPick,
 }: MealPlanViewProps) {
   const [entries, setEntries] = useState(initialEntries);
   const [assignments, setAssignments] = useState(initialAssignments);
@@ -183,6 +185,14 @@ export function MealPlanView({
     setEntries(initialEntries);
     setAssignments(initialAssignments);
   }, [initialAssignments, initialEntries]);
+
+  useEffect(() => {
+    if (!initialPick || !editable) return;
+    setPickerTarget({ date: initialPick.date, mealType: initialPick.mealType });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("pick");
+    window.history.replaceState({}, "", `${url.pathname}?${url.searchParams.toString()}`);
+  }, [editable, initialPick]);
 
   const weekDays = Array.from({ length: 7 }, (_, i) =>
     format(addDays(parseISO(weekStart), i), "yyyy-MM-dd"),
@@ -438,6 +448,7 @@ export function MealPlanView({
             onOpenChange={(open) => {
               if (!open) setPickerTarget(null);
             }}
+            weekStart={weekStart}
             date={pickerTarget.date}
             mealType={pickerTarget.mealType}
             recipes={recipes}
