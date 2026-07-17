@@ -289,6 +289,19 @@ export async function sumPlannedNutritionByDate(
   );
 }
 
+export async function calculateNutritionPerEntry(
+  householdId: string,
+  entries: (PlanEntryNutritionSource & { id: string })[],
+): Promise<Record<string, NutritionValues>> {
+  const result: Record<string, NutritionValues> = {};
+  await Promise.all(
+    entries.map(async (entry) => {
+      result[entry.id] = await calculatePlannedNutritionForEntry(householdId, entry);
+    }),
+  );
+  return result;
+}
+
 /** Kcal per recipe serving for list/palette sorting. */
 export async function getRecipesKcalPerServing(
   householdId: string,

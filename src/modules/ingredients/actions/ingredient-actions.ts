@@ -536,5 +536,4 @@ export async function quickAddUsdaIngredientAction(formData: FormData) {
   revalidatePath("/ingredients");
   revalidatePath("/ingredients/usda");
   revalidatePath("/plan");
-  redirect("/ingredients");
 }

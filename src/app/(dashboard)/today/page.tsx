@@ -72,20 +72,22 @@ export default async function TodayPage() {
                 action={addMealPlanEntryAction}
                 successMessage="Dodano posiłek do planu"
                 errorMessage="Nie udało się dodać posiłku"
-                className="grid gap-2 sm:grid-cols-[1fr_12rem_7rem_auto]"
+                className="space-y-2 sm:flex sm:flex-wrap sm:items-end sm:gap-2 sm:space-y-0"
               >
-                <select name="recipeId" className="h-11 rounded-lg border bg-background px-3" required>
+                <select name="recipeId" className="h-11 w-full rounded-lg border bg-background px-3 text-base sm:w-auto sm:flex-1" required>
                   <option value="">Wybierz przepis</option>
                   {recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
                 </select>
-                <select name="mealType" defaultValue="lunch" className="h-11 rounded-lg border bg-background px-3">
-                  {Object.entries(MEAL_TYPE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-                <Input name="servings" type="number" min="1" defaultValue="1" aria-label="Liczba porcji" />
+                <div className="flex gap-2">
+                  <select name="mealType" defaultValue="lunch" className="h-11 flex-1 rounded-lg border bg-background px-3 text-base sm:w-40 sm:flex-none">
+                    {Object.entries(MEAL_TYPE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <Input name="servings" type="number" min="1" defaultValue="1" aria-label="Liczba porcji" className="w-20" />
+                  <Button type="submit">Dodaj</Button>
+                </div>
                 <input type="hidden" name="date" value={today} />
-                <Button type="submit">Dodaj</Button>
               </FeedbackForm>
             </CardContent>
           </Card>

@@ -35,15 +35,24 @@ interface AddToSlotDialogProps {
     itemId: string,
     itemName: string,
     quantity?: number,
+    unit?: string,
   ) => Promise<void>;
 }
+
+const UNIT_OPTIONS = [
+  { value: "g", label: "g" },
+  { value: "ml", label: "ml" },
+  { value: "szt", label: "szt" },
+  { value: "opakowanie", label: "opakowanie" },
+] as const;
 
 interface QuantityPromptDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   itemName: string;
   defaultQuantity?: number;
-  onConfirm: (quantity: number) => Promise<void>;
+  defaultUnit?: string;
+  onConfirm: (quantity: number, unit: string) => Promise<void>;
 }
 
 export function QuantityPromptDialog({
@@ -51,9 +60,11 @@ export function QuantityPromptDialog({
   onOpenChange,
   itemName,
   defaultQuantity = 100,
+  defaultUnit = "g",
   onConfirm,
 }: QuantityPromptDialogProps) {
   const [quantity, setQuantity] = useState(String(defaultQuantity));
+  const [unit, setUnit] = useState(defaultUnit);
   const [pending, setPending] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -62,9 +73,10 @@ export function QuantityPromptDialog({
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     setPending(true);
     try {
-      await onConfirm(parsed);
+      await onConfirm(parsed, unit);
       onOpenChange(false);
       setQuantity(String(defaultQuantity));
+      setUnit(defaultUnit);
     } finally {
       setPending(false);
     }
@@ -75,13 +87,13 @@ export function QuantityPromptDialog({
       open={open}
       onOpenChange={(next) => {
         onOpenChange(next);
-        if (!next) setQuantity(String(defaultQuantity));
+        if (!next) { setQuantity(String(defaultQuantity)); setUnit(defaultUnit); }
       }}
     >
       <DialogContent>
         <DialogHeader className="flex items-start justify-between gap-2">
           <div>
-            <DialogTitle>Gramatura</DialogTitle>
+            <DialogTitle>Ilość</DialogTitle>
             <p className="mt-1 text-xs text-muted-foreground">{itemName}</p>
           </div>
           <DialogClose asChild>
@@ -92,19 +104,33 @@ export function QuantityPromptDialog({
         </DialogHeader>
         <DialogBody>
           <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
-            <label className="block space-y-1 text-sm">
-              <span className="text-muted-foreground">Ilość (g)</span>
-              <Input
-                type="number"
-                inputMode="decimal"
-                min="0.1"
-                step="any"
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-                autoFocus
-                required
-              />
-            </label>
+            <div className="flex gap-2">
+              <label className="block flex-1 space-y-1 text-sm">
+                <span className="text-muted-foreground">Ilość</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0.1"
+                  step="any"
+                  value={quantity}
+                  onChange={(event) => setQuantity(event.target.value)}
+                  autoFocus
+                  required
+                />
+              </label>
+              <label className="block w-28 space-y-1 text-sm">
+                <span className="text-muted-foreground">Jednostka</span>
+                <select
+                  className="h-11 w-full rounded-lg border bg-background px-2 text-base"
+                  value={unit}
+                  onChange={(event) => setUnit(event.target.value)}
+                >
+                  {UNIT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <Button type="submit" className="w-full" disabled={pending}>
               {pending ? "Dodaję…" : "Dodaj do planu"}
             </Button>
@@ -128,6 +154,7 @@ export function AddToSlotDialog({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [quantityItem, setQuantityItem] = useState<SlotPickerItem | null>(null);
   const [quantity, setQuantity] = useState("100");
+  const [unit, setUnit] = useState("g");
 
   const filteredRecipes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -145,6 +172,7 @@ export function AddToSlotDialog({
     setQuery("");
     setQuantityItem(null);
     setQuantity("100");
+    setUnit("g");
   }
 
   async function handlePick(item: SlotPickerItem) {
@@ -169,7 +197,7 @@ export function AddToSlotDialog({
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     setPendingId(`${quantityItem.kind}:${quantityItem.id}`);
     try {
-      await onPick(quantityItem.kind, quantityItem.id, quantityItem.name, parsed);
+      await onPick(quantityItem.kind, quantityItem.id, quantityItem.name, parsed, unit);
       onOpenChange(false);
       reset();
     } finally {
@@ -188,7 +216,7 @@ export function AddToSlotDialog({
       <DialogContent>
         <DialogHeader className="flex items-start justify-between gap-2">
           <div>
-            <DialogTitle>{quantityItem ? "Gramatura" : "Dodaj posiłek"}</DialogTitle>
+            <DialogTitle>{quantityItem ? "Ilość" : "Dodaj posiłek"}</DialogTitle>
             <p className="mt-1 text-xs text-muted-foreground">
               {quantityItem
                 ? quantityItem.name
@@ -204,19 +232,33 @@ export function AddToSlotDialog({
         <DialogBody className="space-y-4">
           {quantityItem ? (
             <form onSubmit={(event) => void handleQuantitySubmit(event)} className="space-y-4">
-              <label className="block space-y-1 text-sm">
-                <span className="text-muted-foreground">Ilość (g)</span>
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  min="0.1"
-                  step="any"
-                  value={quantity}
-                  onChange={(event) => setQuantity(event.target.value)}
-                  autoFocus
-                  required
-                />
-              </label>
+              <div className="flex gap-2">
+                <label className="block flex-1 space-y-1 text-sm">
+                  <span className="text-muted-foreground">Ilość</span>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0.1"
+                    step="any"
+                    value={quantity}
+                    onChange={(event) => setQuantity(event.target.value)}
+                    autoFocus
+                    required
+                  />
+                </label>
+                <label className="block w-28 space-y-1 text-sm">
+                  <span className="text-muted-foreground">Jednostka</span>
+                  <select
+                    className="h-11 w-full rounded-lg border bg-background px-2 text-base"
+                    value={unit}
+                    onChange={(event) => setUnit(event.target.value)}
+                  >
+                    {UNIT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => setQuantityItem(null)}>
                   Wstecz
