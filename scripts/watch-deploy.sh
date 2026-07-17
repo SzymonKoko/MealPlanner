@@ -5,9 +5,12 @@ REPO_DIR="${WATCH_REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 INTERVAL_SECONDS="${WATCH_INTERVAL_SECONDS:-30}"
 DEPLOY_COMMAND="${WATCH_DEPLOY_COMMAND:-sh scripts/deploy-production.sh}"
 LOCK_DIR="${WATCH_LOCK_DIR:-/tmp/mealplanner-watch-deploy.lock}"
+LOG_FILE="${WATCH_LOG_FILE:-$REPO_DIR/watch-deploy.log}"
 
 log() {
-  printf "%s %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+  message="$(printf "%s %s" "$(date '+%Y-%m-%d %H:%M:%S')" "$*")"
+  printf "%s\n" "$message"
+  printf "%s\n" "$message" >> "$LOG_FILE"
 }
 
 finish() {
@@ -48,6 +51,7 @@ while true; do
     REMOTE_SHA="$(git rev-parse "$UPSTREAM")"
 
     if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
+      : > "$LOG_FILE"
       BASE_SHA="$(git merge-base HEAD "$UPSTREAM")"
 
       if [ "$BASE_SHA" != "$LOCAL_SHA" ]; then
@@ -59,8 +63,12 @@ while true; do
       git pull --ff-only "$REMOTE" "$REMOTE_BRANCH"
 
       log "Running deploy: $DEPLOY_COMMAND"
-      sh -c "$DEPLOY_COMMAND"
-      log "Deploy finished"
+      if sh -c "$DEPLOY_COMMAND"; then
+        log "Deploy finished"
+      else
+        deploy_status=$?
+        log "Deploy failed with status $deploy_status; watcher will continue"
+      fi
     fi
   fi
 

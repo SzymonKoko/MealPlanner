@@ -34,8 +34,7 @@ mkdir -p "$SEED/scripts"
 cat > "$SEED/scripts/deploy-production.sh" <<'DEPLOY'
 #!/bin/sh
 set -eu
-if [ -f fail-deploy ]; then
-  rm fail-deploy
+if grep -q "version-two" app.txt; then
   exit 42
 fi
 printf "deployed:%s\n" "$(git rev-parse --short HEAD)" >> deploy.log
@@ -52,8 +51,7 @@ LOG_FILE="$WORK/watch-deploy.log"
 printf "stale watcher log\n" > "$LOG_FILE"
 
 printf "version-two\n" > "$SEED/app.txt"
-touch "$SEED/fail-deploy"
-git -C "$SEED" add app.txt fail-deploy
+git -C "$SEED" add app.txt
 git -C "$SEED" commit -m "Failing update" >/dev/null
 git -C "$SEED" push >/dev/null 2>&1
 
