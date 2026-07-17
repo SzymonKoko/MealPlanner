@@ -588,6 +588,30 @@ function DayMacros({ totals }: { totals?: DayTotals }) {
   );
 }
 
+function sumMealNutrition(entries: Pick<PlanEntry, "kcal" | "protein" | "carbs" | "fat">[]) {
+  return entries.reduce(
+    (acc, entry) => ({
+      kcal: acc.kcal + entry.kcal,
+      protein: acc.protein + entry.protein,
+      carbs: acc.carbs + entry.carbs,
+      fat: acc.fat + entry.fat,
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+}
+
+function MealSlotMacros({ entries }: { entries: PlanEntry[] }) {
+  if (!entries.length) return null;
+  const totals = sumMealNutrition(entries);
+  if (totals.kcal <= 0) return null;
+  return (
+    <p className="text-xs tabular-nums text-muted-foreground">
+      {Math.round(totals.kcal)} kcal · B {Math.round(totals.protein)} · W {Math.round(totals.carbs)} · T{" "}
+      {Math.round(totals.fat)}
+    </p>
+  );
+}
+
 function WeekGrid({
   weekDays,
   entries,
@@ -697,8 +721,11 @@ function DayDetail({
             className="min-h-28"
             onAddClick={editable ? () => onOpenPicker(mealType) : undefined}
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold">{MEAL_TYPE_LABELS[mealType]}</p>
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{MEAL_TYPE_LABELS[mealType]}</p>
+                <MealSlotMacros entries={typeEntries} />
+              </div>
               {editable ? (
                 <Button type="button" size="sm" variant="outline" onClick={() => onOpenPicker(mealType)}>
                   + Dodaj

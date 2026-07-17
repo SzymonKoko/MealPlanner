@@ -10,6 +10,7 @@ import {
   ingredientCreateSchema,
   ingredientUpdateSchema,
   ingredientUnitConversionSchema,
+  quickIngredientCreateSchema,
   productCreateSchema,
   productUpdateSchema,
   categorySchema,
@@ -536,4 +537,43 @@ export async function quickAddUsdaIngredientAction(formData: FormData) {
   revalidatePath("/ingredients");
   revalidatePath("/ingredients/usda");
   revalidatePath("/plan");
+}
+
+export async function quickCreateIngredientAction(formData: FormData) {
+  const { user, householdId } = await requireActiveHouseholdEditor();
+  const parsed = quickIngredientCreateSchema.safeParse({
+    name: formData.get("name"),
+    kcalPer100: formData.get("kcalPer100") || undefined,
+    proteinPer100: formData.get("proteinPer100") || undefined,
+    carbsPer100: formData.get("carbsPer100") || undefined,
+    fatPer100: formData.get("fatPer100") || undefined,
+  });
+
+  if (!parsed.success) {
+    throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+
+  const ingredient = await createIngredient(
+    householdId,
+    user.id,
+    {
+      name: parsed.data.name,
+      categoryId: null,
+      baseUnit: "g",
+      nutritionBasis: "per100g",
+      kcalPer100: parsed.data.kcalPer100 ?? null,
+      proteinPer100: parsed.data.proteinPer100 ?? null,
+      carbsPer100: parsed.data.carbsPer100 ?? null,
+      fatPer100: parsed.data.fatPer100 ?? null,
+      dataSource: "manual",
+      manuallyModified: true,
+      verifiedByUser: false,
+    },
+    [],
+  );
+
+  revalidatePath("/ingredients");
+  revalidatePath("/plan");
+
+  return { id: ingredient.id, name: ingredient.name };
 }
