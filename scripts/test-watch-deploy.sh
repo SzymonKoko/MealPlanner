@@ -10,7 +10,15 @@ if [ ! -f "$WATCH_SCRIPT" ]; then
 fi
 
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+WATCH_PID=""
+cleanup() {
+  if [ -n "$WATCH_PID" ]; then
+    kill "$WATCH_PID" 2>/dev/null || true
+    wait "$WATCH_PID" 2>/dev/null || true
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT INT TERM
 
 ORIGIN="$TMP_DIR/origin.git"
 SEED="$TMP_DIR/seed"
@@ -26,6 +34,9 @@ mkdir -p "$SEED/scripts"
 cat > "$SEED/scripts/deploy-production.sh" <<'DEPLOY'
 #!/bin/sh
 set -eu
+if grep -q "version-two" app.txt; then
+  exit 42
+fi
 printf "deployed:%s\n" "$(git rev-parse --short HEAD)" >> deploy.log
 DEPLOY
 chmod +x "$SEED/scripts/deploy-production.sh"
@@ -36,35 +47,66 @@ git -C "$SEED" push -u origin main >/dev/null 2>&1
 git --git-dir="$ORIGIN" symbolic-ref HEAD refs/heads/main
 
 git clone "$ORIGIN" "$WORK" >/dev/null 2>&1
-printf "local watcher log\n" > "$WORK/watch-deploy.log"
+LOG_FILE="$WORK/watch-deploy.log"
+printf "stale watcher log\n" > "$LOG_FILE"
 
 printf "version-two\n" > "$SEED/app.txt"
 git -C "$SEED" add app.txt
-git -C "$SEED" commit -m "Update app" >/dev/null
+git -C "$SEED" commit -m "Failing update" >/dev/null
 git -C "$SEED" push >/dev/null 2>&1
 
 WATCH_REPO_DIR="$WORK" \
-WATCH_ONCE=1 \
 WATCH_INTERVAL_SECONDS=1 \
 WATCH_DEPLOY_COMMAND="sh scripts/deploy-production.sh" \
 WATCH_LOCK_DIR="$TMP_DIR/watch.lock" \
-  sh "$WATCH_SCRIPT" > "$TMP_DIR/watch.log"
+WATCH_LOG_FILE="$LOG_FILE" \
+  sh "$WATCH_SCRIPT" > "$TMP_DIR/watch.stdout" 2>&1 &
+WATCH_PID=$!
 
-if [ "$(cat "$WORK/app.txt")" != "version-two" ]; then
-  echo "Watcher did not pull the latest commit" >&2
-  cat "$TMP_DIR/watch.log" >&2
+attempt=0
+while [ "$attempt" -lt 20 ] && ! grep -q "Deploy failed with status 42" "$LOG_FILE"; do
+  attempt=$((attempt + 1))
+  sleep 1
+done
+
+if ! kill -0 "$WATCH_PID" 2>/dev/null; then
+  echo "Watcher stopped after a failed deploy" >&2
+  cat "$TMP_DIR/watch.stdout" >&2
+  exit 1
+fi
+
+if grep -q "stale watcher log" "$LOG_FILE"; then
+  echo "Watcher did not clear the previous log" >&2
+  cat "$LOG_FILE" >&2
+  exit 1
+fi
+
+printf "version-three\n" > "$SEED/app.txt"
+git -C "$SEED" add app.txt
+git -C "$SEED" commit -m "Successful update" >/dev/null
+git -C "$SEED" push >/dev/null 2>&1
+
+attempt=0
+while [ "$attempt" -lt 20 ] && [ ! -f "$WORK/deploy.log" ]; do
+  attempt=$((attempt + 1))
+  sleep 1
+done
+
+if [ "$(cat "$WORK/app.txt")" != "version-three" ]; then
+  echo "Watcher did not pull the update after a failed deploy" >&2
+  cat "$TMP_DIR/watch.stdout" >&2
   exit 1
 fi
 
 if [ "$(wc -l < "$WORK/deploy.log" | tr -d ' ')" != "1" ]; then
-  echo "Watcher did not run deploy exactly once" >&2
-  cat "$TMP_DIR/watch.log" >&2
+  echo "Watcher did not complete exactly one successful deploy" >&2
+  cat "$TMP_DIR/watch.stdout" >&2
   exit 1
 fi
 
-if ! grep -q "Deploy finished" "$TMP_DIR/watch.log"; then
-  echo "Watcher did not report a finished deploy" >&2
-  cat "$TMP_DIR/watch.log" >&2
+if grep -q "Deploy failed" "$LOG_FILE" || ! grep -q "Deploy finished" "$LOG_FILE"; then
+  echo "Watcher did not reset the log for the successful deploy" >&2
+  cat "$LOG_FILE" >&2
   exit 1
 fi
 
