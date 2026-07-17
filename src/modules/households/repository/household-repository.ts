@@ -1,6 +1,6 @@
 import { db } from "@/db/client";
-import { households, householdMembers, householdInvites, users } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { households, householdMembers, householdInvites, users, mealPlanAssignments, mealPlanEntries } from "@/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import type { HouseholdRole, InviteRole } from "@/db/schema/households";
 
 export async function listUserHouseholds(userId: string) {
@@ -165,6 +165,15 @@ export async function removeHouseholdMember(householdId: string, userId: string)
       )
       .returning();
     if (!membership) return null;
+    const householdEntries = await tx.select({ id: mealPlanEntries.id })
+      .from(mealPlanEntries)
+      .where(eq(mealPlanEntries.householdId, householdId));
+    if (householdEntries.length) {
+      await tx.delete(mealPlanAssignments).where(and(
+        eq(mealPlanAssignments.userId, userId),
+        inArray(mealPlanAssignments.mealPlanEntryId, householdEntries.map(({ id }) => id)),
+      ));
+    }
     await tx
       .update(users)
       .set({ activeHouseholdId: null, updatedAt: new Date() })

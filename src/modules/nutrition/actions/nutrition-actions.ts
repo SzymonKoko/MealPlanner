@@ -5,8 +5,7 @@ import { requireAuth } from "@/server/require-auth";
 import { requireActiveHousehold } from "@/server/require-household-member";
 import { nutritionGoalsSchema } from "../validators/nutrition-schemas";
 import { upsertNutritionGoals, getNutritionGoals } from "../repository/nutrition-repository";
-import { calculateGoalProgress } from "../services/daily-nutrition";
-import { calculatePlannedDayNutrition } from "../services/planned-day-nutrition";
+import { calculateDailyNutritionForUser, calculateGoalProgress } from "../services/daily-nutrition";
 import { AppError } from "@/lib/errors";
 import { formatDateISO } from "@/lib/dates";
 
@@ -35,14 +34,14 @@ export async function getTodayNutritionAction(date?: string) {
   const targetDate = date ?? formatDateISO(new Date());
 
   const [plannedDay, goals] = await Promise.all([
-    calculatePlannedDayNutrition(householdId, targetDate),
+    calculateDailyNutritionForUser(householdId, user.id, targetDate),
     getNutritionGoals(user.id),
   ]);
 
   return {
-    planned: plannedDay.planned,
+    planned: plannedDay.consumed,
     meals: plannedDay.meals,
-    progress: calculateGoalProgress(plannedDay.planned, goals),
+    progress: calculateGoalProgress(plannedDay.consumed, goals),
     goals,
   };
 }

@@ -8,7 +8,7 @@ import {
 import {
   mealPlanEntrySchema,
   moveMealPlanEntrySchema,
-  assignmentSchema,
+  splitMealPlanEntrySchema,
   copyWeekSchema,
   mealPlanDetailsSchema,
 } from "../validators/meal-plan-schemas";
@@ -18,18 +18,14 @@ import {
   deleteMealPlanEntry,
   copyMealPlanEntry,
   copyPreviousWeek,
-  setAssignment,
-  getAssignmentsForEntry,
+  replaceEntryShares,
   getMealPlanForWeek,
 } from "../repository/meal-plan-repository";
 import { AppError } from "@/lib/errors";
 import { db } from "@/db/client";
 import { householdMembers, mealPlanEntries, recipes, ingredients, products } from "@/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
-import {
-  canSetAssignment,
-  totalAssignedServings,
-} from "../services/portion-allocation";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { equalShares, percentageAllocationsToShares } from "../services/portion-allocation";
 
 export async function addMealPlanEntryAction(formData: FormData) {
   const { user, householdId } = await requireActiveHouseholdEditor();
@@ -43,6 +39,7 @@ export async function addMealPlanEntryAction(formData: FormData) {
     quantity: formData.get("quantity") || undefined,
     unit: formData.get("unit") || undefined,
     notes: formData.get("notes") || undefined,
+    planScope: formData.get("planScope") || "mine",
   });
 
   if (!parsed.success) {
@@ -158,14 +155,6 @@ export async function updateMealPlanDetailsAction(formData: FormData) {
     if (!parsed.data.servings) {
       throw new AppError("Podaj liczbę porcji", "VALIDATION_ERROR");
     }
-    const assignments = await getAssignmentsForEntry(parsed.data.entryId);
-    const assignedServings = totalAssignedServings(assignments);
-    if (assignedServings > parsed.data.servings) {
-      throw new AppError(
-        "Nowa liczba porcji jest mniejsza niż suma porcji przypisanych domownikom",
-        "VALIDATION_ERROR",
-      );
-    }
     const entry = await updateMealPlanEntry(householdId, parsed.data.entryId, {
       servings: parsed.data.servings,
       notes: parsed.data.notes,
@@ -242,13 +231,13 @@ export async function copyPreviousWeekAction(formData: FormData) {
   revalidatePath("/plan");
 }
 
-export async function assignPortionsAction(formData: FormData) {
+export async function splitMealPlanEntryAction(input:
+  | { entryId: string; mode: "equal"; userIds: string[] }
+  | { entryId: string; mode: "percentage"; allocations: Array<{ userId: string; percentage: number }> }
+  | { entryId: string; mode: "clear" }
+) {
   const { householdId } = await requireActiveHouseholdEditor();
-  const parsed = assignmentSchema.safeParse({
-    mealPlanEntryId: formData.get("mealPlanEntryId"),
-    userId: formData.get("userId"),
-    servings: formData.get("servings"),
-  });
+  const parsed = splitMealPlanEntrySchema.safeParse(input);
 
   if (!parsed.success) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
@@ -259,7 +248,7 @@ export async function assignPortionsAction(formData: FormData) {
     .from(mealPlanEntries)
     .where(
       and(
-        eq(mealPlanEntries.id, parsed.data.mealPlanEntryId),
+        eq(mealPlanEntries.id, parsed.data.entryId),
         eq(mealPlanEntries.householdId, householdId),
       ),
     )
@@ -267,33 +256,25 @@ export async function assignPortionsAction(formData: FormData) {
 
   if (!entry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
 
-  const [member] = await db
-    .select({ id: householdMembers.id })
-    .from(householdMembers)
-    .where(
-      and(
+  const shares = parsed.data.mode === "clear"
+    ? []
+    : parsed.data.mode === "equal"
+      ? equalShares(parsed.data.userIds)
+      : percentageAllocationsToShares(parsed.data.allocations);
+
+  if (shares.length) {
+    const memberships = await db.select({ userId: householdMembers.userId })
+      .from(householdMembers)
+      .where(and(
         eq(householdMembers.householdId, householdId),
-        eq(householdMembers.userId, parsed.data.userId),
-      ),
-    )
-    .limit(1);
-  if (!member) {
-    throw new AppError("Użytkownik nie należy do gospodarstwa", "VALIDATION_ERROR");
+        inArray(householdMembers.userId, shares.map(({ userId }) => userId)),
+      ));
+    if (memberships.length !== shares.length) {
+      throw new AppError("Użytkownik nie należy do gospodarstwa", "VALIDATION_ERROR");
+    }
   }
 
-  const assignments = await getAssignmentsForEntry(parsed.data.mealPlanEntryId);
-  if (
-    !canSetAssignment(
-      entry.servings,
-      assignments,
-      parsed.data.userId,
-      parsed.data.servings,
-    )
-  ) {
-    throw new AppError("Suma porcji przekracza liczbę porcji posiłku", "VALIDATION_ERROR");
-  }
-
-  await setAssignment(parsed.data.mealPlanEntryId, parsed.data.userId, parsed.data.servings);
+  await replaceEntryShares(householdId, parsed.data.entryId, shares);
   revalidatePath("/plan");
   revalidatePath("/today");
 }

@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, integer, numeric, timestamp, date, uniqueIndex, boolean } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, numeric, timestamp, date, uniqueIndex, boolean, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { households } from "./households";
 import { users } from "./users";
 import { recipes } from "./recipes";
@@ -44,9 +45,10 @@ export const mealPlanAssignments = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    servings: integer("servings").notNull().default(1),
+    share: numeric("share", { precision: 9, scale: 8 }).notNull(),
   },
   (table) => [
     uniqueIndex("meal_plan_assignments_entry_user_idx").on(table.mealPlanEntryId, table.userId),
+    check("meal_plan_assignments_share_check", sql`${table.share} > 0 AND ${table.share} <= 1`),
   ],
 );

@@ -88,6 +88,7 @@ export default async function TodayPage() {
                   <Button type="submit">Dodaj</Button>
                 </div>
                 <input type="hidden" name="date" value={today} />
+                <input type="hidden" name="planScope" value="mine" />
               </FeedbackForm>
             </CardContent>
           </Card>

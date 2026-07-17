@@ -30,7 +30,7 @@ import {
   moveMealPlanEntryAction,
   deleteMealPlanEntryAction,
   copyPreviousWeekAction,
-  assignPortionsAction,
+  splitMealPlanEntryAction,
   updateMealPlanDetailsAction,
 } from "@/modules/meal-planner/actions/meal-plan-actions";
 import { AddToSlotDialog, QuantityPromptDialog } from "@/modules/meal-planner/components/add-to-slot-dialog";
@@ -57,13 +57,14 @@ interface PlanEntry {
   protein: number;
   carbs: number;
   fat: number;
+  editable: boolean;
 }
 
 interface Assignment {
   mealPlanEntryId: string;
   userId: string;
   displayName: string;
-  servings: number;
+  share: number;
 }
 
 interface Member {
@@ -89,6 +90,8 @@ interface DayTotals {
 
 interface MealPlanViewProps {
   weekStart: string;
+  scope: "mine" | "household";
+  currentUserId: string;
   selectedDay: string;
   view: PlanViewMode;
   entries: PlanEntry[];
@@ -141,14 +144,17 @@ function parseDragId(id: string):
   return null;
 }
 
-function planHref(params: { week: string; view: PlanViewMode; day?: string }) {
+function planHref(params: { week: string; view: PlanViewMode; day?: string; scope?: "mine" | "household" }) {
   const search = new URLSearchParams({ week: params.week, view: params.view });
   if (params.day) search.set("day", params.day);
+  search.set("scope", params.scope ?? "mine");
   return `/plan?${search.toString()}`;
 }
 
 export function MealPlanView({
   weekStart,
+  scope,
+  currentUserId,
   selectedDay,
   view,
   entries: initialEntries,
@@ -231,7 +237,9 @@ export function MealPlanView({
   const dayEntries = entries.filter((e) => e.date === selectedDay);
 
   function go(href: string) {
-    window.location.href = href;
+    const url = new URL(href, window.location.origin);
+    url.searchParams.set("scope", scope);
+    window.location.href = `${url.pathname}?${url.searchParams.toString()}`;
   }
 
   async function handleAdd(
@@ -249,6 +257,7 @@ export function MealPlanView({
     if (kind === "product") formData.set("productId", itemId);
     formData.set("date", date);
     formData.set("mealType", mealType);
+    formData.set("planScope", scope);
     if (kind === "recipe") {
       formData.set("servings", "1");
     } else {
@@ -315,7 +324,7 @@ export function MealPlanView({
 
     if (drag.type === "entry") {
       const entry = entries.find((item) => item.id === drag.entryId);
-      if (!entry || (entry.date === drop.date && entry.mealType === drop.mealType)) return;
+      if (!entry || !entry.editable || (entry.date === drop.date && entry.mealType === drop.mealType)) return;
       void handleMove(drag.entryId, drop.date, drop.mealType).catch(() => undefined);
       return;
     }
@@ -349,13 +358,24 @@ export function MealPlanView({
         <p className="rounded-lg border border-destructive p-3 text-sm text-destructive">{error}</p>
       ) : null}
 
+      <div className="inline-flex rounded-lg border p-1">
+        <Button type="button" size="sm" variant={scope === "mine" ? "default" : "ghost"}
+          onClick={() => go(planHref({ week: weekStart, view, day: selectedDay, scope: "mine" }))}>
+          Mój plan
+        </Button>
+        <Button type="button" size="sm" variant={scope === "household" ? "default" : "ghost"}
+          onClick={() => go(planHref({ week: weekStart, view, day: selectedDay, scope: "household" }))}>
+          Plan domu
+        </Button>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="inline-flex rounded-lg border p-1">
           <Button
             type="button"
             size="sm"
             variant={view === "day" ? "default" : "ghost"}
-            onClick={() => go(planHref({ week: weekStart, view: "day", day: selectedDay }))}
+            onClick={() => go(planHref({ week: weekStart, view: "day", day: selectedDay, scope }))}
           >
             Dzień
           </Button>
@@ -363,7 +383,7 @@ export function MealPlanView({
             type="button"
             size="sm"
             variant={view === "week" ? "default" : "ghost"}
-            onClick={() => go(planHref({ week: weekStart, view: "week", day: selectedDay }))}
+            onClick={() => go(planHref({ week: weekStart, view: "week", day: selectedDay, scope }))}
           >
             Tydzień
           </Button>
@@ -424,6 +444,8 @@ export function MealPlanView({
             assignments={assignments}
             members={members}
             editable={editable}
+            scope={scope}
+            currentUserId={currentUserId}
             isDragging={isDragging}
             onOpenPicker={(mealType) => setPickerTarget({ date: selectedDay, mealType })}
           />
@@ -696,6 +718,8 @@ function DayDetail({
   assignments,
   members,
   editable,
+  scope,
+  currentUserId,
   isDragging,
   onOpenPicker,
 }: {
@@ -705,6 +729,8 @@ function DayDetail({
   assignments: Assignment[];
   members: Member[];
   editable: boolean;
+  scope: "mine" | "household";
+  currentUserId: string;
   isDragging: boolean;
   onOpenPicker: (mealType: MealType) => void;
 }) {
@@ -750,7 +776,12 @@ function DayDetail({
                   entry={entry}
                   assignments={assignments.filter((a) => a.mealPlanEntryId === entry.id)}
                   members={members}
-                  editable={editable}
+                  editable={editable && (
+                    scope === "household" ||
+                    (assignments.filter((a) => a.mealPlanEntryId === entry.id).length === 1 &&
+                      assignments.some((a) => a.mealPlanEntryId === entry.id && a.userId === currentUserId && a.share === 1))
+                  )}
+                  scope={scope}
                 />
               ))}
             </div>
@@ -762,9 +793,10 @@ function DayDetail({
 }
 
 function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boolean }) {
+  const canEditEntry = editable && entry.editable;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `entry:${entry.id}`,
-    disabled: !editable,
+    disabled: !canEditEntry,
   });
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -776,14 +808,14 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
       ref={setNodeRef}
       style={style}
       className={`group flex items-start gap-1 rounded border bg-accent/40 px-2 py-1.5 text-xs leading-snug ${
-        editable ? "cursor-grab touch-none active:cursor-grabbing" : ""
+        canEditEntry ? "cursor-grab touch-none active:cursor-grabbing" : ""
       }`}
       title={entry.itemName}
-      {...(editable ? listeners : {})}
-      {...(editable ? attributes : {})}
+      {...(canEditEntry ? listeners : {})}
+      {...(canEditEntry ? attributes : {})}
     >
       <span className="min-w-0 flex-1 break-words font-medium">{entry.itemName}</span>
-      {editable ? (
+      {canEditEntry ? (
         <FeedbackForm
           action={deleteMealPlanEntryAction.bind(null, entry.id)}
           successMessage="Usunięto z planu"
@@ -805,16 +837,131 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
   );
 }
 
+function ShareSplitEditor({
+  entry,
+  assignments,
+  members,
+}: {
+  entry: PlanEntry;
+  assignments: Assignment[];
+  members: Member[];
+}) {
+  const [selected, setSelected] = useState(
+    () => new Set(assignments.map(({ userId }) => userId)),
+  );
+  const [percentages, setPercentages] = useState<Record<string, number>>(
+    () => Object.fromEntries(assignments.map(({ userId, share }) => [userId, share * 100])),
+  );
+  const [saving, setSaving] = useState(false);
+  const total = [...selected].reduce((sum, userId) => sum + (percentages[userId] ?? 0), 0);
+
+  async function saveEqual() {
+    setSaving(true);
+    try {
+      await splitMealPlanEntryAction({ entryId: entry.id, mode: "equal", userIds: [...selected] });
+      window.location.reload();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveCustom() {
+    setSaving(true);
+    try {
+      await splitMealPlanEntryAction({
+        entryId: entry.id,
+        mode: "percentage",
+        allocations: [...selected].map((userId) => ({
+          userId,
+          percentage: percentages[userId] ?? 0,
+        })),
+      });
+      window.location.reload();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Podział posiłku</p>
+      {members.map((member) => {
+        const checked = selected.has(member.userId);
+        const percentage = percentages[member.userId] ?? 0;
+        return (
+          <div key={member.userId} className="grid grid-cols-[1fr_5rem] items-center gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={checked} onChange={(event) => {
+                const next = new Set(selected);
+                if (event.target.checked) next.add(member.userId);
+                else next.delete(member.userId);
+                setSelected(next);
+              }} />
+              {member.displayName}
+            </label>
+            <div>
+              <Input type="number" min="0.01" max="100" step="0.01" value={percentage}
+                disabled={!checked}
+                aria-label={`Procent: ${member.displayName}`}
+                onChange={(event) => setPercentages((current) => ({
+                  ...current,
+                  [member.userId]: Number(event.target.value),
+                }))} />
+              {checked ? (
+                <span className="text-xs text-muted-foreground">
+                  {formatPlanEntryAmount({
+                    recipeId: entry.recipeId,
+                    servings: entry.servings * percentage / 100,
+                    quantity: entry.quantity == null ? null : entry.quantity * percentage / 100,
+                    unit: entry.unit,
+                  })}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+      <p className={Math.abs(total - 100) < 0.001 ? "text-xs text-muted-foreground" : "text-xs text-destructive"}>
+        Suma: {Math.round(total * 100) / 100}%
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" disabled={saving || selected.size === 0} onClick={saveEqual}>
+          Podziel równo
+        </Button>
+        <Button type="button" size="sm" variant="outline"
+          disabled={saving || selected.size === 0 || Math.abs(total - 100) >= 0.001}
+          onClick={saveCustom}>
+          Zapisz własny podział
+        </Button>
+        <Button type="button" size="sm" variant="ghost" disabled={saving}
+          onClick={async () => {
+            setSaving(true);
+            try {
+              await splitMealPlanEntryAction({ entryId: entry.id, mode: "clear" });
+              window.location.reload();
+            } finally {
+              setSaving(false);
+            }
+          }}>
+          Wyczyść
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function DetailedEntryCard({
   entry,
   assignments,
   members,
   editable,
+  scope,
 }: {
   entry: PlanEntry;
   assignments: Assignment[];
   members: Member[];
   editable: boolean;
+  scope: "mine" | "household";
 }) {
   const [editing, setEditing] = useState(false);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -879,56 +1026,35 @@ function DetailedEntryCard({
 
       {entry.notes ? <p className="mt-2 text-sm">{entry.notes}</p> : null}
 
-      {entry.sourceType === "recipe" && assignments.length ? (
+      {scope === "household" && assignments.length ? (
         <div className="mt-2 space-y-1">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Porcje domowników</p>
           {assignments.map((a) => (
             <p key={a.userId} className="text-sm">
-              {a.displayName}: {a.servings}
+              {a.displayName}: {Math.round(a.share * 100)}% ({formatPlanEntryAmount({
+                recipeId: entry.recipeId,
+                servings: entry.servings * a.share,
+                quantity: entry.quantity == null ? null : entry.quantity * a.share,
+                unit: entry.unit,
+              })})
             </p>
           ))}
         </div>
       ) : null}
 
+      {scope === "household" && assignments.length === 0 ? (
+        <p className="mt-2 text-sm font-medium text-amber-700">Nie rozdzielono porcji</p>
+      ) : null}
+      {scope === "mine" && !editable ? (
+        <a className="mt-2 inline-block text-sm font-medium text-primary underline" href="/plan?scope=household">
+          Edytuj współdzielony posiłek w Planie domu
+        </a>
+      ) : null}
+
       {editable && editing ? (
         <div className="mt-3 space-y-3 border-t pt-3">
-          {entry.sourceType === "recipe" ? (
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Przypisz porcje</p>
-              {members.map((member) => {
-                const current = assignments.find((item) => item.userId === member.userId)?.servings ?? 0;
-                return (
-                  <div key={member.userId} className="flex min-h-11 items-center justify-between gap-2">
-                    <span className="truncate text-sm">{member.displayName}</span>
-                    <div className="flex items-center gap-1">
-                      <form action={assignPortionsAction}>
-                        <input type="hidden" name="mealPlanEntryId" value={entry.id} />
-                        <input type="hidden" name="userId" value={member.userId} />
-                        <input type="hidden" name="servings" value={Math.max(0, current - 1)} />
-                        <Button
-                          type="submit"
-                          variant="outline"
-                          size="sm"
-                          disabled={current === 0}
-                          aria-label={`Odejmij porcję: ${member.displayName}`}
-                        >
-                          −
-                        </Button>
-                      </form>
-                      <span className="min-w-5 text-center text-sm">{current}</span>
-                      <form action={assignPortionsAction}>
-                        <input type="hidden" name="mealPlanEntryId" value={entry.id} />
-                        <input type="hidden" name="userId" value={member.userId} />
-                        <input type="hidden" name="servings" value={current + 1} />
-                        <Button type="submit" variant="outline" size="sm" aria-label={`Dodaj porcję: ${member.displayName}`}>
-                          +
-                        </Button>
-                      </form>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {scope === "household" ? (
+            <ShareSplitEditor entry={entry} assignments={assignments} members={members} />
           ) : null}
 
           <FeedbackForm

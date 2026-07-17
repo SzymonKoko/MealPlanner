@@ -5,14 +5,17 @@ import {
 } from "@/lib/nutrition";
 import { getMealPlanForDate, getAssignmentsForEntry } from "@/modules/meal-planner/repository/meal-plan-repository";
 import { calculatePlannedNutritionForEntry } from "./planned-nutrition";
+import { formatPlanEntryAmount } from "@/modules/meal-planner/lib/format-entry-amount";
+import { calculatePersonalEntryNutrition } from "./personal-nutrition";
 
 export interface DailyNutritionResult {
   consumed: NutritionValues;
   meals: {
     entryId: string;
-    recipeName: string;
+    itemName: string;
     mealType: string;
     servings: number;
+    amountLabel: string;
     nutrition: NutritionValues;
   }[];
 }
@@ -31,19 +34,33 @@ export async function calculateDailyNutritionForUser(
     if (!userAssignment) continue;
     if (!entry.recipeId && !entry.ingredientId && !entry.productId) continue;
 
-    const userNutrition = await calculatePlannedNutritionForEntry(householdId, {
+    const fullNutrition = await calculatePlannedNutritionForEntry(householdId, {
       recipeId: entry.recipeId,
       ingredientId: entry.ingredientId,
       productId: entry.productId,
-      servings: userAssignment.servings,
+      servings: entry.servings,
+      quantity: entry.quantity,
+      unit: entry.unit,
+    });
+    const personal = calculatePersonalEntryNutrition({
+      nutrition: fullNutrition,
+      servings: entry.servings,
+      quantity: entry.quantity == null ? null : Number.parseFloat(String(entry.quantity)),
+      share: Number.parseFloat(userAssignment.share),
     });
 
     meals.push({
       entryId: entry.id,
-      recipeName: itemName,
+      itemName,
       mealType: entry.mealType,
-      servings: userAssignment.servings,
-      nutrition: userNutrition,
+      servings: personal.servings,
+      amountLabel: formatPlanEntryAmount({
+        recipeId: entry.recipeId,
+        servings: personal.servings,
+        quantity: personal.quantity,
+        unit: entry.unit,
+      }),
+      nutrition: personal.nutrition,
     });
   }
 

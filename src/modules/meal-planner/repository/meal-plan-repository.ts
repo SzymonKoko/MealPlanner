@@ -7,9 +7,10 @@ import {
   products,
   users,
 } from "@/db/schema";
-import { and, eq, gte, lte, between, inArray, isNull, isNotNull, or } from "drizzle-orm";
+import { and, eq, gte, lte, between, inArray, isNull, isNotNull, or, sql } from "drizzle-orm";
 import { addDays, format, parseISO } from "date-fns";
 import type { MealType } from "@/db/schema/meal-planner";
+import { validateShares } from "../services/portion-allocation";
 
 function activeSourceFilter() {
   return or(
@@ -112,25 +113,32 @@ export async function createMealPlanEntry(
     quantity?: number;
     unit?: string;
     notes?: string;
+    planScope?: "mine" | "household";
   },
 ) {
-  const [entry] = await db
-    .insert(mealPlanEntries)
-    .values({
-      householdId,
-      createdBy: userId,
-      recipeId: data.recipeId ?? null,
-      ingredientId: data.ingredientId ?? null,
-      productId: data.productId ?? null,
-      date: data.date,
-      mealType: data.mealType,
-      servings: data.servings,
-      quantity: data.quantity != null ? String(data.quantity) : null,
-      unit: data.unit ?? null,
-      notes: data.notes,
-    })
-    .returning();
-  return entry;
+  return db.transaction(async (tx) => {
+    const [entry] = await tx.insert(mealPlanEntries).values({
+        householdId,
+        createdBy: userId,
+        recipeId: data.recipeId ?? null,
+        ingredientId: data.ingredientId ?? null,
+        productId: data.productId ?? null,
+        date: data.date,
+        mealType: data.mealType,
+        servings: data.servings,
+        quantity: data.quantity != null ? String(data.quantity) : null,
+        unit: data.unit ?? null,
+        notes: data.notes,
+      }).returning();
+    if (data.planScope === "mine") {
+      await tx.insert(mealPlanAssignments).values({
+        mealPlanEntryId: entry.id,
+        userId,
+        share: "1",
+      });
+    }
+    return entry;
+  });
 }
 
 export async function updateMealPlanEntry(
@@ -211,7 +219,7 @@ export async function copyMealPlanEntry(
         assignments.map((assignment) => ({
           mealPlanEntryId: copy.id,
           userId: assignment.userId,
-          servings: assignment.servings,
+          share: assignment.share,
         })),
       );
     }
@@ -285,7 +293,7 @@ export async function copyPreviousWeek(
         ? [{
             mealPlanEntryId: copiedEntryId,
             userId: assignment.userId,
-            servings: assignment.servings,
+            share: assignment.share,
           }]
         : [];
     });
@@ -297,49 +305,34 @@ export async function copyPreviousWeek(
   });
 }
 
-export async function setAssignment(
+export async function replaceEntryShares(
+  householdId: string,
   mealPlanEntryId: string,
-  userId: string,
-  servings: number,
+  shares: Array<{ userId: string; share: number }>,
 ) {
-  if (servings === 0) {
-    const [removed] = await db
-      .delete(mealPlanAssignments)
-      .where(
-        and(
-          eq(mealPlanAssignments.mealPlanEntryId, mealPlanEntryId),
-          eq(mealPlanAssignments.userId, userId),
-        ),
-      )
-      .returning();
-    return removed ?? null;
-  }
+  if (shares.length) validateShares(shares);
+  return db.transaction(async (tx) => {
+    const locked = await tx.execute(sql`
+      SELECT id FROM meal_plan_entries
+      WHERE id = ${mealPlanEntryId} AND household_id = ${householdId}
+      FOR UPDATE
+    `);
+    if (locked.length === 0) return null;
 
-  const [existing] = await db
-    .select()
-    .from(mealPlanAssignments)
-    .where(
-      and(
-        eq(mealPlanAssignments.mealPlanEntryId, mealPlanEntryId),
-        eq(mealPlanAssignments.userId, userId),
-      ),
-    )
-    .limit(1);
-
-  if (existing) {
-    const [updated] = await db
-      .update(mealPlanAssignments)
-      .set({ servings })
-      .where(eq(mealPlanAssignments.id, existing.id))
-      .returning();
-    return updated;
-  }
-
-  const [created] = await db
-    .insert(mealPlanAssignments)
-    .values({ mealPlanEntryId, userId, servings })
-    .returning();
-  return created;
+    await tx.delete(mealPlanAssignments).where(
+      eq(mealPlanAssignments.mealPlanEntryId, mealPlanEntryId),
+    );
+    if (shares.length) {
+      await tx.insert(mealPlanAssignments).values(
+        shares.map(({ userId, share }) => ({
+          mealPlanEntryId,
+          userId,
+          share: String(share),
+        })),
+      );
+    }
+    return shares;
+  });
 }
 
 export async function getAssignmentsForEntry(mealPlanEntryId: string) {
