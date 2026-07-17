@@ -63,6 +63,8 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         ingredientId: e.entry.ingredientId,
         productId: e.entry.productId,
         servings: e.entry.servings,
+        quantity: e.entry.quantity,
+        unit: e.entry.unit,
         date: e.entry.date,
       })),
     ),
@@ -94,6 +96,8 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
     date: e.entry.date,
     mealType: e.entry.mealType,
     servings: e.entry.servings,
+    quantity: e.entry.quantity != null ? Number.parseFloat(String(e.entry.quantity)) : null,
+    unit: e.entry.unit,
     notes: e.entry.notes,
     isBatchCooking: e.entry.isBatchCooking,
   }));

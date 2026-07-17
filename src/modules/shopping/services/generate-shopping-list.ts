@@ -106,13 +106,14 @@ export async function collectIngredientsFromPlan(
     if (entry.ingredientId) {
       const ingredient = await getIngredient(householdId, entry.ingredientId);
       if (!ingredient) continue;
-      // Jedna porcja składnika ≈ 100 jednostek bazowych (g/ml).
+      const quantity =
+        entry.quantity != null ? Number.parseFloat(String(entry.quantity)) : entry.servings * 100;
       collected.push({
         ingredientId: ingredient.id,
         productId: null,
         name: ingredient.name,
-        quantity: entry.servings * 100,
-        unit: ingredient.baseUnit,
+        quantity,
+        unit: entry.unit ?? ingredient.baseUnit,
         categoryId: ingredient.categoryId,
       });
       continue;
@@ -125,6 +126,19 @@ export async function collectIngredientsFromPlan(
         .where(and(eq(products.id, entry.productId), eq(products.householdId, householdId)))
         .limit(1);
       if (!product) continue;
+      const explicitQuantity =
+        entry.quantity != null ? Number.parseFloat(String(entry.quantity)) : null;
+      if (explicitQuantity != null) {
+        collected.push({
+          ingredientId: product.ingredientId,
+          productId: product.id,
+          name: product.name,
+          quantity: explicitQuantity,
+          unit: entry.unit ?? product.packageUnit ?? "g",
+          categoryId: null,
+        });
+        continue;
+      }
       if (product.packageQuantity && product.packageUnit) {
         collected.push({
           ingredientId: product.ingredientId,

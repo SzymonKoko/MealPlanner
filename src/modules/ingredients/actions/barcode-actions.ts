@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { AppError } from "@/lib/errors";
 import { requireActiveHouseholdEditor } from "@/server/require-household-member";
 import {
@@ -115,4 +116,5 @@ export async function approveImportedProductAction(formData: FormData) {
 
   revalidatePath("/ingredients");
   revalidatePath("/ingredients/scan");
+  redirect("/ingredients");
 }

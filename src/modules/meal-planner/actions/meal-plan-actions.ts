@@ -40,6 +40,8 @@ export async function addMealPlanEntryAction(formData: FormData) {
     date: formData.get("date"),
     mealType: formData.get("mealType"),
     servings: formData.get("servings") || 1,
+    quantity: formData.get("quantity") || undefined,
+    unit: formData.get("unit") || undefined,
     notes: formData.get("notes") || undefined,
   });
 
@@ -86,7 +88,11 @@ export async function addMealPlanEntryAction(formData: FormData) {
     if (!product) throw new AppError("Produkt nie należy do gospodarstwa", "VALIDATION_ERROR");
   }
 
-  await createMealPlanEntry(householdId, user.id, parsed.data);
+  await createMealPlanEntry(householdId, user.id, {
+    ...parsed.data,
+    quantity: parsed.data.quantity,
+    unit: parsed.data.unit ?? (parsed.data.ingredientId || parsed.data.productId ? "g" : undefined),
+  });
   revalidatePath("/plan");
   revalidatePath("/today");
 }
@@ -121,7 +127,9 @@ export async function updateMealPlanDetailsAction(formData: FormData) {
   const { householdId } = await requireActiveHouseholdEditor();
   const parsed = mealPlanDetailsSchema.safeParse({
     entryId: formData.get("entryId"),
-    servings: formData.get("servings"),
+    servings: formData.get("servings") || undefined,
+    quantity: formData.get("quantity") || undefined,
+    unit: formData.get("unit") || undefined,
     notes: formData.get("notes") || undefined,
     isBatchCooking: formData.get("isBatchCooking") === "true",
   });
@@ -129,7 +137,12 @@ export async function updateMealPlanDetailsAction(formData: FormData) {
     throw new AppError(parsed.error.errors[0]?.message ?? "Nieprawidłowe dane", "VALIDATION_ERROR");
   }
   const [existingEntry] = await db
-    .select({ id: mealPlanEntries.id })
+    .select({
+      id: mealPlanEntries.id,
+      recipeId: mealPlanEntries.recipeId,
+      ingredientId: mealPlanEntries.ingredientId,
+      productId: mealPlanEntries.productId,
+    })
     .from(mealPlanEntries)
     .where(
       and(
@@ -139,20 +152,38 @@ export async function updateMealPlanDetailsAction(formData: FormData) {
     )
     .limit(1);
   if (!existingEntry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
-  const assignments = await getAssignmentsForEntry(parsed.data.entryId);
-  const assignedServings = totalAssignedServings(assignments);
-  if (assignedServings > parsed.data.servings) {
-    throw new AppError(
-      "Nowa liczba porcji jest mniejsza niż suma porcji przypisanych domownikom",
-      "VALIDATION_ERROR",
-    );
+
+  const isRecipe = Boolean(existingEntry.recipeId);
+  if (isRecipe) {
+    if (!parsed.data.servings) {
+      throw new AppError("Podaj liczbę porcji", "VALIDATION_ERROR");
+    }
+    const assignments = await getAssignmentsForEntry(parsed.data.entryId);
+    const assignedServings = totalAssignedServings(assignments);
+    if (assignedServings > parsed.data.servings) {
+      throw new AppError(
+        "Nowa liczba porcji jest mniejsza niż suma porcji przypisanych domownikom",
+        "VALIDATION_ERROR",
+      );
+    }
+    const entry = await updateMealPlanEntry(householdId, parsed.data.entryId, {
+      servings: parsed.data.servings,
+      notes: parsed.data.notes,
+      isBatchCooking: parsed.data.isBatchCooking,
+    });
+    if (!entry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
+  } else {
+    if (!parsed.data.quantity) {
+      throw new AppError("Podaj gramaturę", "VALIDATION_ERROR");
+    }
+    const entry = await updateMealPlanEntry(householdId, parsed.data.entryId, {
+      quantity: parsed.data.quantity,
+      unit: parsed.data.unit ?? "g",
+      notes: parsed.data.notes,
+      isBatchCooking: parsed.data.isBatchCooking,
+    });
+    if (!entry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
   }
-  const entry = await updateMealPlanEntry(householdId, parsed.data.entryId, {
-    servings: parsed.data.servings,
-    notes: parsed.data.notes,
-    isBatchCooking: parsed.data.isBatchCooking,
-  });
-  if (!entry) throw new AppError("Wpis planera nie istnieje", "NOT_FOUND", 404);
   revalidatePath("/plan");
   revalidatePath("/today");
 }

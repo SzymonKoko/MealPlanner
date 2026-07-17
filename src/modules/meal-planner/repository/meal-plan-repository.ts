@@ -109,6 +109,8 @@ export async function createMealPlanEntry(
     date: string;
     mealType: MealType;
     servings: number;
+    quantity?: number;
+    unit?: string;
     notes?: string;
   },
 ) {
@@ -123,6 +125,8 @@ export async function createMealPlanEntry(
       date: data.date,
       mealType: data.mealType,
       servings: data.servings,
+      quantity: data.quantity != null ? String(data.quantity) : null,
+      unit: data.unit ?? null,
       notes: data.notes,
     })
     .returning();
@@ -136,15 +140,22 @@ export async function updateMealPlanEntry(
     date: string;
     mealType: MealType;
     servings: number;
+    quantity: number;
+    unit: string;
     notes: string;
     recipeId: string;
     status: string;
     isBatchCooking: boolean;
   }>,
 ) {
+  const { quantity, ...rest } = data;
   const [entry] = await db
     .update(mealPlanEntries)
-    .set({ ...data, updatedAt: new Date() })
+    .set({
+      ...rest,
+      ...(quantity != null ? { quantity: String(quantity) } : {}),
+      updatedAt: new Date(),
+    })
     .where(and(eq(mealPlanEntries.id, entryId), eq(mealPlanEntries.householdId, householdId)))
     .returning();
   return entry;
@@ -182,6 +193,8 @@ export async function copyMealPlanEntry(
         date: targetDate ?? original.date,
         mealType: targetMealType ?? original.mealType,
         servings: original.servings,
+        quantity: original.quantity,
+        unit: original.unit,
         notes: original.notes,
         status: original.status,
         isBatchCooking: original.isBatchCooking,
@@ -253,6 +266,8 @@ export async function copyPreviousWeek(
           date: format(addDays(parseISO(entry.date), dayOffset), "yyyy-MM-dd"),
           mealType: entry.mealType,
           servings: entry.servings,
+          quantity: entry.quantity,
+          unit: entry.unit,
           notes: entry.notes,
           status: entry.status,
           isBatchCooking: entry.isBatchCooking,
