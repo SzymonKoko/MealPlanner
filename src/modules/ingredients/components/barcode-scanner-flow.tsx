@@ -113,10 +113,12 @@ export function BarcodeScannerFlow({
   ingredients,
   initialBarcode,
   initialRefresh,
+  returnTo,
 }: {
   ingredients: IngredientOption[];
   initialBarcode?: string;
   initialRefresh?: boolean;
+  returnTo?: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
@@ -342,6 +344,7 @@ export function BarcodeScannerFlow({
             ) : null}
 
             <form action={approveImportedProductAction} className="space-y-4">
+              {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
               {currentProduct ? <input type="hidden" name="existingProductId" value={currentProduct.id} /> : null}
               <input type="hidden" name="barcode" value={lookupBarcode || manualBarcode} />
               <input type="hidden" name="externalId" value={currentCandidate?.externalId ?? ""} />

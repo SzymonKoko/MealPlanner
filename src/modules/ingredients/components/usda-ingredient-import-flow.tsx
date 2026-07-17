@@ -21,6 +21,7 @@ interface UsdaIngredientImportFlowProps {
   categories: { id: string; name: string }[];
   tags: { id: string; name: string }[];
   initialQuery?: string;
+  returnTo?: string | null;
 }
 
 const EMPTY_CONVERSION_ROWS = [
@@ -54,6 +55,7 @@ export function UsdaIngredientImportFlow({
   categories,
   tags,
   initialQuery = "",
+  returnTo = null,
 }: UsdaIngredientImportFlowProps) {
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
@@ -119,7 +121,7 @@ export function UsdaIngredientImportFlow({
       formData.set("name", query.trim() || result.name);
       await quickAddUsdaIngredientAction(formData);
       toast.success(`Dodano „${query.trim() || result.name}” do składników`);
-      router.push("/ingredients");
+      router.push(returnTo ?? "/ingredients");
     } catch (addError) {
       const message = addError instanceof Error ? addError.message : "Nie udało się dodać składnika";
       setError(message);
@@ -155,7 +157,9 @@ export function UsdaIngredientImportFlow({
                 {pending ? "Szukam..." : "Wyszukaj dane"}
               </Button>
               <Button asChild type="button" variant="outline">
-                <Link href="/ingredients">Wróć do składników</Link>
+                <Link href={returnTo ?? "/ingredients"}>
+                  {returnTo ? "Wróć do planera" : "Wróć do składników"}
+                </Link>
               </Button>
             </div>
           </form>
@@ -233,6 +237,7 @@ export function UsdaIngredientImportFlow({
           </CardHeader>
           <CardContent>
             <form action={approveUsdaIngredientAction} className="space-y-4">
+              {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
               <input type="hidden" name="externalId" value={selected.externalId} />
               <input type="hidden" name="originalName" value={selected.originalName} />
               <input type="hidden" name="dataSource" value="usda" />

@@ -5,14 +5,17 @@ import { requireActiveHouseholdEditorOrRedirect } from "@/server/require-househo
 import { listIngredients } from "@/modules/ingredients/repository/ingredient-repository";
 import { BarcodeScannerFlow } from "@/modules/ingredients/components/barcode-scanner-flow";
 
+import { sanitizePlanReturnTo } from "@/lib/return-to";
+
 interface ScanPageProps {
-  searchParams: Promise<{ barcode?: string; refresh?: string }>;
+  searchParams: Promise<{ barcode?: string; refresh?: string; return?: string }>;
 }
 
 export default async function IngredientScanPage({ searchParams }: ScanPageProps) {
   const { householdId } = await requireActiveHouseholdEditorOrRedirect();
   const params = await searchParams;
   const ingredients = await listIngredients(householdId);
+  const returnTo = sanitizePlanReturnTo(params.return);
 
   return (
     <DashboardShell>
@@ -25,7 +28,9 @@ export default async function IngredientScanPage({ searchParams }: ScanPageProps
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link href="/ingredients">Wróć do produktów</Link>
+            <Link href={returnTo ?? "/ingredients"}>
+              {returnTo ? "Wróć do planera" : "Wróć do produktów"}
+            </Link>
           </Button>
         </div>
         <BarcodeScannerFlow
@@ -35,6 +40,7 @@ export default async function IngredientScanPage({ searchParams }: ScanPageProps
           }))}
           initialBarcode={params.barcode}
           initialRefresh={params.refresh === "1"}
+          returnTo={returnTo}
         />
       </div>
     </DashboardShell>
