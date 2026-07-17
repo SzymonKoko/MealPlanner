@@ -36,3 +36,15 @@ body {
 .pb-safe {
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
 }
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+html {
+  scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}

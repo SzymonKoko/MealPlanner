@@ -118,7 +118,7 @@ export default async function TodayPage() {
                   <div>
                     <p className="font-medium">{meal.itemName}</p>
                     <p className="text-sm text-muted-foreground">
-                      {MEAL_TYPE_LABELS[meal.mealType as keyof typeof MEAL_TYPE_LABELS]} · {meal.servings} porcji
+                      {MEAL_TYPE_LABELS[meal.mealType as keyof typeof MEAL_TYPE_LABELS]} · {meal.amountLabel}
                     </p>
                   </div>
                   <p className="shrink-0 text-sm tabular-nums text-muted-foreground">

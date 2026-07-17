@@ -1,6 +1,7 @@
 import { getMealPlanForDate } from "@/modules/meal-planner/repository/meal-plan-repository";
 import { calculatePlannedNutritionForEntry } from "./planned-nutrition";
 import { sumNutrition, EMPTY_NUTRITION, type NutritionValues } from "@/lib/nutrition";
+import { formatPlanEntryAmount } from "@/modules/meal-planner/lib/format-entry-amount";
 
 export async function calculatePlannedDayNutrition(
   householdId: string,
@@ -11,7 +12,7 @@ export async function calculatePlannedDayNutrition(
     entryId: string;
     itemName: string;
     mealType: string;
-    servings: number;
+    amountLabel: string;
     nutrition: NutritionValues;
   }[];
 }> {
@@ -20,7 +21,7 @@ export async function calculatePlannedDayNutrition(
     entryId: string;
     itemName: string;
     mealType: string;
-    servings: number;
+    amountLabel: string;
     nutrition: NutritionValues;
   }[] = [];
 
@@ -31,12 +32,19 @@ export async function calculatePlannedDayNutrition(
       ingredientId: entry.ingredientId,
       productId: entry.productId,
       servings: entry.servings,
+      quantity: entry.quantity,
+      unit: entry.unit,
     });
     meals.push({
       entryId: entry.id,
       itemName,
       mealType: entry.mealType,
-      servings: entry.servings,
+      amountLabel: formatPlanEntryAmount({
+        recipeId: entry.recipeId,
+        servings: entry.servings,
+        quantity: entry.quantity,
+        unit: entry.unit,
+      }),
       nutrition,
     });
   }

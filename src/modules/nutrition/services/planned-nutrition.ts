@@ -46,6 +46,50 @@ async function nutritionForIngredientSource(
   }
 }
 
+async function nutritionForProductByQuantity(
+  householdId: string,
+  productId: string,
+  quantity: number,
+  unit: string,
+): Promise<NutritionValues> {
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(and(eq(products.id, productId), eq(products.householdId, householdId)))
+    .limit(1);
+  if (!product) return { ...EMPTY_NUTRITION };
+
+  const [linkedIngredient] = product.ingredientId
+    ? await db
+        .select({ id: ingredients.id, densityGramsPerMl: ingredients.densityGramsPerMl })
+        .from(ingredients)
+        .where(
+          and(
+            eq(ingredients.id, product.ingredientId),
+            eq(ingredients.householdId, householdId),
+            isNull(ingredients.deletedAt),
+          ),
+        )
+        .limit(1)
+    : [];
+
+  const nutritionSource: NutritionPer100 = {
+    ...product,
+    densityGramsPerMl: linkedIngredient?.densityGramsPerMl ?? null,
+    unitConversions: linkedIngredient
+      ? await getIngredientUnitConversions([linkedIngredient.id])
+      : [],
+    packageQuantity: product.packageQuantity,
+    packageUnit: product.packageUnit,
+  };
+
+  try {
+    return calculateNutritionForQuantity(nutritionSource, quantity, unit);
+  } catch {
+    return { ...EMPTY_NUTRITION };
+  }
+}
+
 async function nutritionForProductSource(
   householdId: string,
   productId: string,
@@ -176,8 +220,16 @@ export type PlanEntryNutritionSource = {
   ingredientId: string | null;
   productId: string | null;
   servings: number;
+  quantity?: number | string | null;
+  unit?: string | null;
   date?: string;
 };
+
+function parseQuantity(value: number | string | null | undefined): number | null {
+  if (value == null) return null;
+  const parsed = typeof value === "number" ? value : Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
 
 /** Full planned nutrition for an entry (scaled by entry.servings). */
 export async function calculatePlannedNutritionForEntry(
@@ -188,20 +240,35 @@ export async function calculatePlannedNutritionForEntry(
     return nutritionForRecipeServings(householdId, entry.recipeId, entry.servings);
   }
   if (entry.ingredientId) {
+    const quantity = parseQuantity(entry.quantity) ?? entry.servings * 100;
     const [ingredient] = await db
       .select({ baseUnit: ingredients.baseUnit })
       .from(ingredients)
       .where(eq(ingredients.id, entry.ingredientId))
       .limit(1);
-    const portion = await nutritionForIngredientSource(
+    return nutritionForIngredientSource(
       householdId,
       entry.ingredientId,
-      100,
-      ingredient?.baseUnit ?? "g",
+      quantity,
+      entry.unit ?? ingredient?.baseUnit ?? "g",
     );
-    return scaleNutrition(portion, entry.servings);
   }
   if (entry.productId) {
+    const quantity = parseQuantity(entry.quantity);
+    if (quantity != null) {
+      const [product] = await db
+        .select({
+          nutritionBasis: products.nutritionBasis,
+          packageQuantity: products.packageQuantity,
+          packageUnit: products.packageUnit,
+        })
+        .from(products)
+        .where(and(eq(products.id, entry.productId), eq(products.householdId, householdId)))
+        .limit(1);
+      if (!product) return { ...EMPTY_NUTRITION };
+      const unit = entry.unit ?? product.packageUnit ?? (product.nutritionBasis === "per100ml" ? "ml" : "g");
+      return nutritionForProductByQuantity(householdId, entry.productId, quantity, unit);
+    }
     return nutritionForProductSource(householdId, entry.productId, entry.servings);
   }
   return { ...EMPTY_NUTRITION };

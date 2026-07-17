@@ -16,6 +16,8 @@ export const mealPlanEntrySchema = z
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     mealType: z.enum(mealTypeEnum),
     servings: z.coerce.number().int().min(1).default(1),
+    quantity: z.coerce.number().positive().optional(),
+    unit: z.string().max(20).optional(),
     notes: z.string().max(500).optional(),
   })
   .superRefine((data, ctx) => {
@@ -24,6 +26,15 @@ export const mealPlanEntrySchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Wybierz dokładnie jeden przepis lub składnik",
+      });
+      return;
+    }
+    if (data.recipeId) return;
+    if (!data.quantity) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["quantity"],
+        message: "Podaj gramaturę",
       });
     }
   });
@@ -42,7 +53,9 @@ export const assignmentSchema = z.object({
 
 export const mealPlanDetailsSchema = z.object({
   entryId: z.string().uuid(),
-  servings: z.coerce.number().int().min(1),
+  servings: z.coerce.number().int().min(1).optional(),
+  quantity: z.coerce.number().positive().optional(),
+  unit: z.string().max(20).optional(),
   notes: z.string().max(500).optional(),
   isBatchCooking: z.coerce.boolean().default(false),
 });

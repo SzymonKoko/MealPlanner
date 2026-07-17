@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, date, uniqueIndex, boolean } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, numeric, timestamp, date, uniqueIndex, boolean } from "drizzle-orm/pg-core";
 import { households } from "./households";
 import { users } from "./users";
 import { recipes } from "./recipes";
@@ -24,6 +24,8 @@ export const mealPlanEntries = pgTable("meal_plan_entries", {
   date: date("date").notNull(),
   mealType: text("meal_type").notNull().$type<MealType>(),
   servings: integer("servings").notNull().default(1),
+  quantity: numeric("quantity", { precision: 12, scale: 4 }),
+  unit: text("unit"),
   status: text("status").notNull().default("planned"),
   notes: text("notes"),
   isBatchCooking: boolean("is_batch_cooking").notNull().default(false),

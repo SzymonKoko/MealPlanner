@@ -31,7 +31,8 @@ import {
   assignPortionsAction,
   updateMealPlanDetailsAction,
 } from "@/modules/meal-planner/actions/meal-plan-actions";
-import { AddToSlotDialog } from "@/modules/meal-planner/components/add-to-slot-dialog";
+import { AddToSlotDialog, QuantityPromptDialog } from "@/modules/meal-planner/components/add-to-slot-dialog";
+import { formatPlanEntryAmount } from "@/modules/meal-planner/lib/format-entry-amount";
 
 type PlanViewMode = "day" | "week";
 type SourceType = "recipe" | "ingredient" | "product";
@@ -46,6 +47,8 @@ interface PlanEntry {
   date: string;
   mealType: MealType;
   servings: number;
+  quantity: number | null;
+  unit: string | null;
   notes: string | null;
   isBatchCooking: boolean;
 }
@@ -143,6 +146,13 @@ export function MealPlanView({
   const [activeDragLabel, setActiveDragLabel] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{ date: string; mealType: MealType } | null>(null);
+  const [quantityPrompt, setQuantityPrompt] = useState<{
+    kind: SourceType;
+    itemId: string;
+    date: string;
+    mealType: MealType;
+    itemName: string;
+  } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
@@ -196,6 +206,7 @@ export function MealPlanView({
     date: string,
     mealType: MealType,
     itemName: string,
+    quantity?: number,
   ) {
     const formData = new FormData();
     if (kind === "recipe") formData.set("recipeId", itemId);
@@ -203,7 +214,13 @@ export function MealPlanView({
     if (kind === "product") formData.set("productId", itemId);
     formData.set("date", date);
     formData.set("mealType", mealType);
-    formData.set("servings", "1");
+    if (kind === "recipe") {
+      formData.set("servings", "1");
+    } else {
+      formData.set("quantity", String(quantity ?? 100));
+      formData.set("unit", "g");
+      formData.set("servings", "1");
+    }
     setError(null);
     try {
       await addMealPlanEntryAction(formData);
@@ -273,7 +290,17 @@ export function MealPlanView({
         ? recipes.find((r) => r.id === drag.itemId)
         : ingredients.find((i) => i.id === drag.itemId && i.kind === drag.kind);
     if (!item) return;
-    void handleAdd(drag.kind, drag.itemId, drop.date, drop.mealType, item.name);
+    if (drag.kind === "recipe") {
+      void handleAdd(drag.kind, drag.itemId, drop.date, drop.mealType, item.name);
+      return;
+    }
+    setQuantityPrompt({
+      kind: drag.kind,
+      itemId: drag.itemId,
+      date: drop.date,
+      mealType: drop.mealType,
+      itemName: item.name,
+    });
   }
 
   function handleDragCancel() {
@@ -389,8 +416,30 @@ export function MealPlanView({
             mealType={pickerTarget.mealType}
             recipes={recipes}
             ingredients={ingredients}
-            onPick={async (kind, itemId, itemName) => {
-              await handleAdd(kind, itemId, pickerTarget.date, pickerTarget.mealType, itemName);
+            onPick={async (kind, itemId, itemName, quantity) => {
+              await handleAdd(kind, itemId, pickerTarget.date, pickerTarget.mealType, itemName, quantity);
+            }}
+          />
+        ) : null}
+
+        {editable && quantityPrompt ? (
+          <QuantityPromptDialog
+            open={Boolean(quantityPrompt)}
+            onOpenChange={(open) => {
+              if (!open) setQuantityPrompt(null);
+            }}
+            itemName={quantityPrompt.itemName}
+            onConfirm={async (quantity) => {
+              const prompt = quantityPrompt;
+              setQuantityPrompt(null);
+              await handleAdd(
+                prompt.kind,
+                prompt.itemId,
+                prompt.date,
+                prompt.mealType,
+                prompt.itemName,
+                quantity,
+              );
             }}
           />
         ) : null}
@@ -532,8 +581,8 @@ function WeekGrid({
   return (
     <div className="overflow-x-auto pb-2">
       <div
-        className="grid items-start gap-2"
-        style={{ gridTemplateColumns: "5.5rem repeat(7, minmax(9.5rem, 1fr))", minWidth: "74rem" }}
+        className="grid min-w-[48rem] items-start gap-2 md:min-w-[74rem]"
+        style={{ gridTemplateColumns: "5.5rem repeat(7, minmax(9.5rem, 1fr))" }}
       >
         <div />
         {weekDays.map((day) => (
@@ -750,13 +799,21 @@ function DetailedEntryCard({
 
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
         <span>{entry.sourceType === "recipe" ? "Przepis" : "Składnik"}</span>
-        <span>{entry.servings} porcji</span>
+        <span>
+          {formatPlanEntryAmount({
+            sourceType: entry.sourceType,
+            recipeId: entry.recipeId,
+            servings: entry.servings,
+            quantity: entry.quantity,
+            unit: entry.unit,
+          })}
+        </span>
         {entry.isBatchCooking ? <span>Gotowanie na kilka dni</span> : null}
       </div>
 
       {entry.notes ? <p className="mt-2 text-sm">{entry.notes}</p> : null}
 
-      {assignments.length ? (
+      {entry.sourceType === "recipe" && assignments.length ? (
         <div className="mt-2 space-y-1">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Porcje domowników</p>
           {assignments.map((a) => (
@@ -769,42 +826,44 @@ function DetailedEntryCard({
 
       {editable && editing ? (
         <div className="mt-3 space-y-3 border-t pt-3">
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Przypisz porcje</p>
-            {members.map((member) => {
-              const current = assignments.find((item) => item.userId === member.userId)?.servings ?? 0;
-              return (
-                <div key={member.userId} className="flex min-h-11 items-center justify-between gap-2">
-                  <span className="truncate text-sm">{member.displayName}</span>
-                  <div className="flex items-center gap-1">
-                    <form action={assignPortionsAction}>
-                      <input type="hidden" name="mealPlanEntryId" value={entry.id} />
-                      <input type="hidden" name="userId" value={member.userId} />
-                      <input type="hidden" name="servings" value={Math.max(0, current - 1)} />
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        size="sm"
-                        disabled={current === 0}
-                        aria-label={`Odejmij porcję: ${member.displayName}`}
-                      >
-                        −
-                      </Button>
-                    </form>
-                    <span className="min-w-5 text-center text-sm">{current}</span>
-                    <form action={assignPortionsAction}>
-                      <input type="hidden" name="mealPlanEntryId" value={entry.id} />
-                      <input type="hidden" name="userId" value={member.userId} />
-                      <input type="hidden" name="servings" value={current + 1} />
-                      <Button type="submit" variant="outline" size="sm" aria-label={`Dodaj porcję: ${member.displayName}`}>
-                        +
-                      </Button>
-                    </form>
+          {entry.sourceType === "recipe" ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Przypisz porcje</p>
+              {members.map((member) => {
+                const current = assignments.find((item) => item.userId === member.userId)?.servings ?? 0;
+                return (
+                  <div key={member.userId} className="flex min-h-11 items-center justify-between gap-2">
+                    <span className="truncate text-sm">{member.displayName}</span>
+                    <div className="flex items-center gap-1">
+                      <form action={assignPortionsAction}>
+                        <input type="hidden" name="mealPlanEntryId" value={entry.id} />
+                        <input type="hidden" name="userId" value={member.userId} />
+                        <input type="hidden" name="servings" value={Math.max(0, current - 1)} />
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          size="sm"
+                          disabled={current === 0}
+                          aria-label={`Odejmij porcję: ${member.displayName}`}
+                        >
+                          −
+                        </Button>
+                      </form>
+                      <span className="min-w-5 text-center text-sm">{current}</span>
+                      <form action={assignPortionsAction}>
+                        <input type="hidden" name="mealPlanEntryId" value={entry.id} />
+                        <input type="hidden" name="userId" value={member.userId} />
+                        <input type="hidden" name="servings" value={current + 1} />
+                        <Button type="submit" variant="outline" size="sm" aria-label={`Dodaj porcję: ${member.displayName}`}>
+                          +
+                        </Button>
+                      </form>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : null}
 
           <FeedbackForm
             action={updateMealPlanDetailsAction}
@@ -814,18 +873,35 @@ function DetailedEntryCard({
             className="space-y-2"
           >
             <input type="hidden" name="entryId" value={entry.id} />
-            <label className="block space-y-1 text-sm">
-              <span className="text-muted-foreground">Porcje</span>
-              <input
-                className="h-11 w-full rounded-lg border bg-background px-2"
-                type="number"
-                min="1"
-                name="servings"
-                defaultValue={entry.servings}
-              />
-            </label>
+            {entry.sourceType === "recipe" ? (
+              <label className="block space-y-1 text-sm">
+                <span className="text-muted-foreground">Porcje</span>
+                <input
+                  className="h-11 w-full rounded-lg border bg-background px-2 text-base"
+                  type="number"
+                  min="1"
+                  name="servings"
+                  defaultValue={entry.servings}
+                />
+              </label>
+            ) : (
+              <>
+                <label className="block space-y-1 text-sm">
+                  <span className="text-muted-foreground">Gramatura (g)</span>
+                  <input
+                    className="h-11 w-full rounded-lg border bg-background px-2 text-base"
+                    type="number"
+                    min="0.1"
+                    step="any"
+                    name="quantity"
+                    defaultValue={entry.quantity ?? entry.servings * 100}
+                  />
+                </label>
+                <input type="hidden" name="unit" value={entry.unit ?? "g"} />
+              </>
+            )}
             <textarea
-              className="min-h-20 w-full rounded-lg border bg-background p-2 text-sm"
+              className="min-h-20 w-full rounded-lg border bg-background p-2 text-base"
               name="notes"
               defaultValue={entry.notes ?? ""}
               placeholder="Notatka"
