@@ -5,6 +5,8 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  TouchSensor,
+  closestCenter,
   useDraggable,
   useDroppable,
   useSensor,
@@ -105,6 +107,21 @@ function parseDropId(id: string): { date: string; mealType: MealType } | null {
   return { date, mealType: mealType as MealType };
 }
 
+function resolveDropTarget(
+  overId: string,
+  planEntries: PlanEntry[],
+): { date: string; mealType: MealType } | null {
+  const cell = parseDropId(overId);
+  if (cell) return cell;
+
+  if (overId.startsWith("entry:")) {
+    const entry = planEntries.find((item) => item.id === overId.slice("entry:".length));
+    if (entry) return { date: entry.date, mealType: entry.mealType };
+  }
+
+  return null;
+}
+
 function parseDragId(id: string):
   | { type: "entry"; entryId: string }
   | { type: "palette"; kind: SourceType; itemId: string }
@@ -157,7 +174,10 @@ export function MealPlanView({
     mealType: MealType;
     itemName: string;
   } | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
+  );
 
   useEffect(() => {
     setEntries(initialEntries);
@@ -279,7 +299,7 @@ export function MealPlanView({
     setActiveDragLabel(null);
     if (!event.over || !editable) return;
 
-    const drop = parseDropId(String(event.over.id));
+    const drop = resolveDropTarget(String(event.over.id), entries);
     const drag = parseDragId(String(event.active.id));
     if (!drop || !drag) return;
 
@@ -371,6 +391,7 @@ export function MealPlanView({
 
       <DndContext
         sensors={sensors}
+        collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
@@ -716,24 +737,14 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
     <div
       ref={setNodeRef}
       style={style}
-      className="group flex items-start gap-1 rounded border bg-accent/40 px-2 py-1.5 text-xs leading-snug"
+      className={`group flex items-start gap-1 rounded border bg-accent/40 px-2 py-1.5 text-xs leading-snug ${
+        editable ? "cursor-grab touch-none active:cursor-grabbing" : ""
+      }`}
+      title={entry.itemName}
+      {...(editable ? listeners : {})}
+      {...(editable ? attributes : {})}
     >
-      <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          className={editable ? "cursor-grab touch-none text-left font-medium" : "text-left font-medium"}
-          {...(editable ? listeners : {})}
-          {...(editable ? attributes : {})}
-          title={entry.itemName}
-        >
-          <span className="break-words">{entry.itemName}</span>
-        </button>
-        {entry.kcal > 0 ? (
-          <span className="block text-[10px] tabular-nums text-muted-foreground">
-            {Math.round(entry.kcal)} · B{Math.round(entry.protein)} W{Math.round(entry.carbs)} T{Math.round(entry.fat)}
-          </span>
-        ) : null}
-      </div>
+      <span className="min-w-0 flex-1 break-words font-medium">{entry.itemName}</span>
       {editable ? (
         <FeedbackForm
           action={deleteMealPlanEntryAction.bind(null, entry.id)}
@@ -746,6 +757,7 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
             size="sm"
             className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
             aria-label={`Usuń ${entry.itemName}`}
+            onPointerDown={(event) => event.stopPropagation()}
           >
             ×
           </Button>
@@ -777,21 +789,18 @@ function DetailedEntryCard({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="rounded-lg border bg-accent/20 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <button
-          type="button"
-          className={
-            editable
-              ? "cursor-grab touch-none text-left text-base font-semibold"
-              : "text-left text-base font-semibold"
-          }
-          {...(editable ? listeners : {})}
-          {...(editable ? attributes : {})}
-        >
-          {entry.itemName}
-        </button>
-        <div className="flex shrink-0 gap-1">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`rounded-lg border bg-accent/20 p-3 ${editable ? "touch-none" : ""}`}
+    >
+      <div
+        className={`flex items-start justify-between gap-2 ${editable ? "cursor-grab active:cursor-grabbing" : ""}`}
+        {...(editable ? listeners : {})}
+        {...(editable ? attributes : {})}
+      >
+        <p className="text-base font-semibold">{entry.itemName}</p>
+        <div className="flex shrink-0 gap-1" onPointerDown={(event) => event.stopPropagation()}>
           {editable ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => setEditing((value) => !value)}>
               {editing ? "Zwiń" : "Edytuj"}
