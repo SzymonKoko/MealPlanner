@@ -15,6 +15,7 @@ import {
   updateMemberRoleAction,
   removeMemberAction,
   revokeInviteAction,
+  updateInviteRoleAction,
   leaveHouseholdAction,
   transferOwnershipAction,
 } from "@/modules/households/actions/household-actions";
@@ -22,9 +23,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Link from "next/link";
 import { PwaInstallButton } from "@/components/shared/pwa-install-button";
 import { FeedbackForm } from "@/components/shared/feedback-form";
+import { CopyInviteLinkButton } from "@/modules/households/components/copy-invite-link-button";
 
 export default async function MorePage() {
   const user = await requireAuth();
@@ -185,29 +186,55 @@ export default async function MorePage() {
               <CardContent>
                 <form action={inviteMember} className="flex flex-wrap gap-2">
                   <input type="hidden" name="householdId" value={activeHouseholdId} />
-                  <Input name="email" type="email" placeholder="Email (opcjonalnie)" className="flex-1" />
+                  <Input name="email" type="email" placeholder="Email" className="flex-1" required />
                   <select name="role" className="h-11 rounded-lg border border-input bg-background px-3 text-sm">
                     <option value="member">member</option>
                     <option value="viewer">viewer</option>
                   </select>
-                  <Button type="submit">Utwórz link</Button>
+                  <Button type="submit">Zaproś</Button>
                 </form>
                 {invites.length > 0 ? (
                   <div className="mt-4 space-y-2">
                     <p className="text-sm font-medium">Aktywne zaproszenia</p>
                     {invites.map((inv) => (
-                      <div key={inv.id} className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-                        <span>
-                          <Link href={`/invite/${inv.token}`} className="break-all underline">
-                            {`${process.env.APP_URL ?? ""}/invite/${inv.token}`}
-                          </Link>{" "}
-                          ({inv.role}) — ważne do {inv.expiresAt.toLocaleDateString("pl-PL")}
-                        </span>
-                        <form action={revokeInviteAction}>
-                          <input type="hidden" name="householdId" value={activeHouseholdId} />
-                          <input type="hidden" name="inviteId" value={inv.id} />
-                          <Button type="submit" size="sm" variant="ghost">Unieważnij</Button>
-                        </form>
+                      <div key={inv.id} className="space-y-2 rounded-lg border p-3 text-sm">
+                        <div>
+                          <p className="font-medium text-foreground">
+                            {inv.email ?? "Link bez e-maila"} <span className="font-normal text-muted-foreground">(oczekujące)</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Ważne do {inv.expiresAt.toLocaleDateString("pl-PL")}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CopyInviteLinkButton link={`${process.env.APP_URL ?? ""}/invite/${inv.token}`} />
+                          <FeedbackForm
+                            action={updateInviteRoleAction}
+                            successMessage="Zmieniono uprawnienia zaproszenia"
+                            className="flex items-center gap-2"
+                          >
+                            <input type="hidden" name="householdId" value={activeHouseholdId} />
+                            <input type="hidden" name="inviteId" value={inv.id} />
+                            <select
+                              name="role"
+                              defaultValue={inv.role}
+                              aria-label={`Uprawnienia zaproszenia ${inv.email ?? ""}`}
+                              className="h-9 rounded-lg border bg-background px-2 text-sm"
+                            >
+                              <option value="member">member</option>
+                              <option value="viewer">viewer</option>
+                            </select>
+                            <Button type="submit" size="sm" variant="secondary">Uprawnienia</Button>
+                          </FeedbackForm>
+                          <FeedbackForm
+                            action={revokeInviteAction}
+                            successMessage="Usunięto zaproszenie"
+                          >
+                            <input type="hidden" name="householdId" value={activeHouseholdId} />
+                            <input type="hidden" name="inviteId" value={inv.id} />
+                            <Button type="submit" size="sm" variant="ghost" className="text-destructive">Usuń</Button>
+                          </FeedbackForm>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -220,4 +247,3 @@ export default async function MorePage() {
     </DashboardShell>
   );
 }
-

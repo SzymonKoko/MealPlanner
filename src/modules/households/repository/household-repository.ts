@@ -228,3 +228,21 @@ export async function revokeInvite(householdId: string, inviteId: string) {
     .returning();
   return invite ?? null;
 }
+
+export async function updateInviteRole(
+  householdId: string,
+  inviteId: string,
+  role: InviteRole,
+) {
+  const [invite] = await db
+    .update(householdInvites)
+    .set({ role })
+    .where(
+      and(
+        eq(householdInvites.id, inviteId),
+        eq(householdInvites.householdId, householdId),
+      ),
+    )
+    .returning();
+  return invite ?? null;
+}

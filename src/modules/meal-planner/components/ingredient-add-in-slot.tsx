@@ -52,6 +52,8 @@ export function IngredientAddInSlotPanel({
   const [usdaResults, setUsdaResults] = useState<IngredientImportSearchResultDto[]>([]);
   const [usdaError, setUsdaError] = useState<string | null>(null);
   const [addingUsdaId, setAddingUsdaId] = useState<string | null>(null);
+  const [selectedUsda, setSelectedUsda] = useState<IngredientImportSearchResultDto | null>(null);
+  const [selectedUsdaName, setSelectedUsdaName] = useState("");
 
   function openManual() {
     setNewName(initialName || newName);
@@ -62,6 +64,7 @@ export function IngredientAddInSlotPanel({
     setUsdaQuery(initialName || usdaQuery);
     setUsdaResults([]);
     setUsdaError(null);
+    setSelectedUsda(null);
     setMode("usda");
   }
 
@@ -96,6 +99,7 @@ export function IngredientAddInSlotPanel({
     setPending(true);
     setUsdaError(null);
     setUsdaResults([]);
+    setSelectedUsda(null);
     try {
       const response = await fetch(`/api/ingredients/usda/search?query=${encodeURIComponent(usdaQuery)}`);
       const payload = (await response.json()) as {
@@ -114,12 +118,14 @@ export function IngredientAddInSlotPanel({
   }
 
   async function handleUsdaQuickAdd(result: IngredientImportSearchResultDto) {
+    const name = selectedUsdaName.trim();
+    if (!name) return;
     setAddingUsdaId(result.externalId);
     setUsdaError(null);
     try {
       const formData = new FormData();
       formData.set("externalId", result.externalId);
-      formData.set("name", usdaQuery.trim() || result.name);
+      formData.set("name", name);
       const created = await quickAddUsdaIngredientAction(formData);
       toast.success(`Dodano „${created.name}"`);
       onCreated({
@@ -243,7 +249,38 @@ export function IngredientAddInSlotPanel({
         </div>
       </form>
       {usdaError ? <p className="text-sm text-destructive">{usdaError}</p> : null}
-      {usdaResults.length ? (
+      {selectedUsda ? (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Zapisz składnik z USDA</p>
+          <label className="block space-y-1 text-sm">
+            <span className="text-muted-foreground">Nazwa składnika</span>
+            <Input
+              value={selectedUsdaName}
+              onChange={(event) => setSelectedUsdaName(event.target.value)}
+              autoFocus
+              required
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">
+            {selectedUsda.kcalPer100 ? `${formatMacro(selectedUsda.kcalPer100)} kcal / 100g` : "— kcal"}
+            {" · "}B {formatMacro(selectedUsda.proteinPer100)} · W {formatMacro(selectedUsda.carbsPer100)} · T{" "}
+            {formatMacro(selectedUsda.fatPer100)}
+          </p>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={() => setSelectedUsda(null)}>
+              Wstecz
+            </Button>
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={addingUsdaId !== null || !selectedUsdaName.trim()}
+              onClick={() => void handleUsdaQuickAdd(selectedUsda)}
+            >
+              {addingUsdaId ? "Dodaję…" : "Zapisz i wybierz ilość"}
+            </Button>
+          </div>
+        </div>
+      ) : usdaResults.length ? (
         <div className="max-h-52 space-y-2 overflow-y-auto">
           {usdaResults.map((result) => (
             <div key={result.externalId} className="rounded-lg border p-2 text-sm">
@@ -258,9 +295,12 @@ export function IngredientAddInSlotPanel({
                 size="sm"
                 className="mt-2"
                 disabled={addingUsdaId !== null}
-                onClick={() => void handleUsdaQuickAdd(result)}
+                onClick={() => {
+                  setSelectedUsda(result);
+                  setSelectedUsdaName(result.name);
+                }}
               >
-                {addingUsdaId === result.externalId ? "Dodaję…" : "Dodaj"}
+                Wybierz
               </Button>
             </div>
           ))}

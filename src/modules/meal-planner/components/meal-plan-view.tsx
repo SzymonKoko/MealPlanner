@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   DndContext,
   DragOverlay,
@@ -359,13 +360,15 @@ export function MealPlanView({
       ) : null}
 
       <div className="inline-flex rounded-lg border p-1">
-        <Button type="button" size="sm" variant={scope === "mine" ? "default" : "ghost"}
-          onClick={() => go(planHref({ week: weekStart, view, day: selectedDay, scope: "mine" }))}>
+        <Button asChild size="sm" variant={scope === "mine" ? "default" : "ghost"}>
+          <Link href={planHref({ week: weekStart, view, day: selectedDay, scope: "mine" })}>
           Mój plan
+          </Link>
         </Button>
-        <Button type="button" size="sm" variant={scope === "household" ? "default" : "ghost"}
-          onClick={() => go(planHref({ week: weekStart, view, day: selectedDay, scope: "household" }))}>
+        <Button asChild size="sm" variant={scope === "household" ? "default" : "ghost"}>
+          <Link href={planHref({ week: weekStart, view, day: selectedDay, scope: "household" })}>
           Plan domu
+          </Link>
         </Button>
       </div>
 
@@ -473,6 +476,7 @@ export function MealPlanView({
             weekStart={weekStart}
             date={pickerTarget.date}
             mealType={pickerTarget.mealType}
+            scope={scope}
             recipes={recipes}
             ingredients={ingredients}
             onPick={async (kind, itemId, itemName, quantity, unit) => {
@@ -559,15 +563,17 @@ function DayNavigation({
           Następny
         </Button>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="grid grid-cols-7 gap-1">
         {weekDays.map((day) => (
           <Button
             key={day}
             size="sm"
             variant={selectedDay === day ? "default" : "outline"}
+            className="h-auto min-h-11 min-w-0 flex-col gap-0 px-1 py-1 leading-tight"
             onClick={() => onNavigate(planHref({ week: weekStart, view: "day", day }))}
           >
-            {format(parseISO(day), "EEE d", { locale: pl })}
+            <span>{format(parseISO(day), "EEE", { locale: pl })}</span>
+            <span>{format(parseISO(day), "d", { locale: pl })}</span>
           </Button>
         ))}
       </div>

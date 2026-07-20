@@ -31,6 +31,7 @@ interface AddToSlotDialogProps {
   weekStart: string;
   date: string;
   mealType: MealType;
+  scope: "mine" | "household";
   recipes: SlotPickerItem[];
   ingredients: SlotPickerItem[];
   onPick: (
@@ -150,6 +151,7 @@ export function AddToSlotDialog({
   weekStart,
   date,
   mealType,
+  scope,
   recipes,
   ingredients,
   onPick,
@@ -162,7 +164,7 @@ export function AddToSlotDialog({
   const [quantity, setQuantity] = useState("100");
   const [unit, setUnit] = useState("g");
 
-  const planReturnUrl = buildPlanPickerReturnUrl(weekStart, date, mealType);
+  const planReturnUrl = buildPlanPickerReturnUrl(weekStart, date, mealType, scope);
   const scanHref = `/ingredients/scan?return=${encodeURIComponent(planReturnUrl)}`;
   const usdaPageHref = `/ingredients/usda?return=${encodeURIComponent(planReturnUrl)}&query=${encodeURIComponent(query.trim())}`;
 

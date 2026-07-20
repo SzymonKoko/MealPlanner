@@ -21,6 +21,7 @@ import {
   removeHouseholdMember,
   revokeInvite,
   transferHouseholdOwnership,
+  updateInviteRole,
 } from "../repository/household-repository";
 import { AppError } from "@/lib/errors";
 import { z } from "zod";
@@ -159,6 +160,24 @@ export async function revokeInviteAction(formData: FormData) {
   }
   await requireHouseholdOwner(parsedHouseholdId.data);
   if (!(await revokeInvite(parsedHouseholdId.data, parsedInviteId.data))) {
+    throw new AppError("Zaproszenie nie istnieje", "NOT_FOUND", 404);
+  }
+  revalidatePath("/more");
+}
+
+export async function updateInviteRoleAction(formData: FormData) {
+  const parsedHouseholdId = uuidSchema.safeParse(formData.get("householdId"));
+  const parsedInviteId = uuidSchema.safeParse(formData.get("inviteId"));
+  const role = formData.get("role");
+  if (
+    !parsedHouseholdId.success ||
+    !parsedInviteId.success ||
+    (role !== "member" && role !== "viewer")
+  ) {
+    throw new AppError("Nieprawidłowe dane", "VALIDATION_ERROR");
+  }
+  await requireHouseholdOwner(parsedHouseholdId.data);
+  if (!(await updateInviteRole(parsedHouseholdId.data, parsedInviteId.data, role))) {
     throw new AppError("Zaproszenie nie istnieje", "NOT_FOUND", 404);
   }
   revalidatePath("/more");

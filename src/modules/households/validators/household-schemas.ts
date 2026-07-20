@@ -6,7 +6,7 @@ export const createHouseholdSchema = z.object({
 
 export const inviteMemberSchema = z.object({
   householdId: z.string().uuid(),
-  email: z.string().email().optional().or(z.literal("")),
+  email: z.string().email("Podaj prawidłowy adres e-mail"),
   role: z.enum(["member", "viewer"]).default("member"),
 });
 

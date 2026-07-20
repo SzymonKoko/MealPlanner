@@ -23,6 +23,10 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(),
+}));
+
 vi.mock("@/server/require-household-member", () => ({
   requireActiveHouseholdEditor: vi.fn(async () => ({
     householdId: "household-1",
