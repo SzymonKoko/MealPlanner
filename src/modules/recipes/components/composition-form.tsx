@@ -99,16 +99,7 @@ export function CompositionForm({
   }
 
   return (
-    <form onSubmit={(event) => void submit(event)} className="space-y-4">
-      <Card>
-        <CardHeader><CardTitle>{initialData ? "Edytuj kompozycję" : "Nowa kompozycja"}</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1"><Label htmlFor="name">Nazwa</Label><Input id="name" name="name" defaultValue={initialData?.name} placeholder="np. Bowl" required /></div>
-          <div className="space-y-1"><Label htmlFor="description">Opis</Label><textarea id="description" name="description" defaultValue={initialData?.description ?? ""} className="flex min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" /></div>
-          <p className="text-sm text-muted-foreground">W każdej sekcji osoba układająca posiłek wybierze jeden wariant.</p>
-        </CardContent>
-      </Card>
-
+    <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
           <div><CardTitle>Warianty</CardTitle><p className="mt-1 text-sm text-muted-foreground">Wybieraj z istniejących pozycji albo dodaj nową.</p></div>
@@ -135,6 +126,16 @@ export function CompositionForm({
         ) : null}
       </Card>
 
+      <form onSubmit={(event) => void submit(event)} className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle>{initialData ? "Edytuj kompozycję" : "Nowa kompozycja"}</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1"><Label htmlFor="name">Nazwa</Label><Input id="name" name="name" defaultValue={initialData?.name} placeholder="np. Bowl" required /></div>
+          <div className="space-y-1"><Label htmlFor="description">Opis</Label><textarea id="description" name="description" defaultValue={initialData?.description ?? ""} className="flex min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" /></div>
+          <p className="text-sm text-muted-foreground">W każdej sekcji osoba układająca posiłek wybierze jeden lub kilka wariantów.</p>
+        </CardContent>
+      </Card>
+
       {sections.map((section, sectionIndex) => (
         <Card key={section.key}>
           <CardHeader className="flex flex-row items-center gap-2 space-y-0">
@@ -159,6 +160,7 @@ export function CompositionForm({
       <Button type="button" variant="outline" onClick={() => setSections([...sections, newSection()])}>+ Sekcja</Button>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <div><Button type="submit" disabled={pending}>{pending ? "Zapisywanie…" : "Zapisz kompozycję"}</Button></div>
-    </form>
+      </form>
+    </div>
   );
 }
