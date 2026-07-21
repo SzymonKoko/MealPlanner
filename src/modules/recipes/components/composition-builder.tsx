@@ -15,14 +15,15 @@ import { calculateNutritionForQuantity, EMPTY_NUTRITION, sumNutrition } from "@/
 import { addCompositionToPlanAction } from "../actions/composition-actions";
 import { finishPlanReturnUrl } from "@/lib/return-to";
 
-type NutritionSource = {
+export type CompositionNutritionSource = {
   id: string; name: string; nutritionBasis: NutritionBasis;
   kcalPer100: string | null; proteinPer100: string | null; carbsPer100: string | null;
   fatPer100: string | null; fiberPer100: string | null; saltPer100: string | null;
   densityGramsPerMl?: string | null; unitConversions?: IngredientUnitConversion[];
   packageQuantity?: string | null; packageUnit?: string | null;
 };
-type Option = { id: string; ingredientId: string | null; productId: string | null; quantity: string; unit: string };
+export type CompositionOption = { id: string; ingredientId: string | null; productId: string | null; quantity: string; unit: string };
+export type CompositionSection = { id: string; name: string; options: CompositionOption[] };
 
 export function CompositionBuilder({
   compositionId,
@@ -30,12 +31,16 @@ export function CompositionBuilder({
   sources,
   today,
   initialTarget,
+  lockTarget = false,
+  onAdded,
 }: {
   compositionId: string;
-  sections: Array<{ id: string; name: string; options: Option[] }>;
-  sources: NutritionSource[];
+  sections: CompositionSection[];
+  sources: CompositionNutritionSource[];
   today: string;
   initialTarget?: { date: string; mealType: MealType; scope: "mine" | "household"; returnTo: string };
+  lockTarget?: boolean;
+  onAdded?: () => void;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Record<string, string[]>>(
@@ -66,10 +71,14 @@ export function CompositionBuilder({
         planScope: scope,
       });
       toast.success("Dodano kompozycję do planera");
-      router.push(initialTarget?.returnTo
-        ? finishPlanReturnUrl(initialTarget.returnTo)
-        : `/plan?view=day&day=${date}&scope=${scope}`);
       router.refresh();
+      if (onAdded) {
+        onAdded();
+      } else {
+        router.push(initialTarget?.returnTo
+          ? finishPlanReturnUrl(initialTarget.returnTo)
+          : `/plan?view=day&day=${date}&scope=${scope}`);
+      }
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Nie udało się dodać posiłku");
     } finally { setPending(false); }
@@ -108,11 +117,13 @@ export function CompositionBuilder({
             <span>W {nutrition.carbs.toFixed(1)} g</span><span>T {nutrition.fat.toFixed(1)} g</span>
             <span>Bł {nutrition.fiber.toFixed(1)} g</span><span>Sól {nutrition.salt.toFixed(2)} g</span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          {!lockTarget ? <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1"><Label htmlFor="composition-date">Data</Label><Input id="composition-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} /></div>
             <div className="space-y-1"><Label htmlFor="composition-meal">Posiłek</Label><select id="composition-meal" value={mealType} onChange={(event) => setMealType(event.target.value as MealType)} className="h-11 w-full rounded-lg border bg-background px-3">{Object.entries(MEAL_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
             <div className="space-y-1"><Label htmlFor="composition-scope">Dla kogo</Label><select id="composition-scope" value={scope} onChange={(event) => setScope(event.target.value as "mine" | "household")} className="h-11 w-full rounded-lg border bg-background px-3"><option value="mine">Tylko dla mnie</option><option value="household">Całe gospodarstwo</option></select></div>
-          </div>
+          </div> : (
+            <p className="text-sm text-muted-foreground">Posiłek zostanie dodany do wybranego miejsca w planerze.</p>
+          )}
           <Button onClick={() => void addToPlan()} disabled={pending || sections.some((section) => !selected[section.id]?.length)}>{pending ? "Dodawanie…" : "Dodaj do planera"}</Button>
         </CardContent>
       </Card>

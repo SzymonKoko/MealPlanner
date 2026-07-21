@@ -88,6 +88,15 @@ export function IngredientAddInSlotPanel({
         name: created.name,
         kind: "ingredient",
         kcalLabel: kcalLabelFrom100(newKcal.trim() || created.kcalPer100),
+        nutrition: {
+          nutritionBasis: created.nutritionBasis,
+          kcalPer100: created.kcalPer100,
+          proteinPer100: created.proteinPer100,
+          carbsPer100: created.carbsPer100,
+          fatPer100: created.fatPer100,
+          fiberPer100: created.fiberPer100,
+          saltPer100: created.saltPer100,
+        },
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Nie udało się dodać składnika");
@@ -135,6 +144,15 @@ export function IngredientAddInSlotPanel({
         name: created.name,
         kind: "ingredient",
         kcalLabel: kcalLabelFrom100(created.kcalPer100 ?? result.kcalPer100),
+        nutrition: {
+          nutritionBasis: created.nutritionBasis,
+          kcalPer100: created.kcalPer100,
+          proteinPer100: created.proteinPer100,
+          carbsPer100: created.carbsPer100,
+          fatPer100: created.fatPer100,
+          fiberPer100: created.fiberPer100,
+          saltPer100: created.saltPer100,
+        },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Nie udało się dodać składnika";
