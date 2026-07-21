@@ -3,7 +3,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { DashboardShell } from "@/components/shared/dashboard-shell";
 import { requireActiveHouseholdOrRedirect } from "@/server/require-household-member";
-import { getRecipeWithIngredients } from "@/modules/recipes/repository/recipe-repository";
+import { getComposition, getRecipeWithIngredients } from "@/modules/recipes/repository/recipe-repository";
 import {
   deleteRecipeFormAction,
   getRecipeNutritionAction,
@@ -12,6 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { canEdit } from "@/modules/households/services/role-checks";
 import { ScaledIngredientList } from "@/modules/recipes/components/scaled-ingredient-list";
+import { CompositionBuilder } from "@/modules/recipes/components/composition-builder";
+import { getRecipeSourceOptions } from "@/modules/recipes/services/recipe-source-options";
+import { formatDateISO } from "@/lib/dates";
 
 interface RecipeDetailPageProps {
   params: Promise<{ id: string }>;
@@ -23,8 +26,45 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
 
   const data = await getRecipeWithIngredients(householdId, id);
   if (!data) notFound();
-  const nutrition = await getRecipeNutritionAction(id);
   const editable = canEdit(role);
+
+  if (data.recipe.kind === "composition") {
+    const [composition, sources] = await Promise.all([
+      getComposition(householdId, id),
+      getRecipeSourceOptions(householdId),
+    ]);
+    if (!composition) notFound();
+    return (
+      <DashboardShell>
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><p className="text-sm text-muted-foreground">Kompozycja</p><h1 className="text-2xl font-bold">{composition.recipe.name}</h1></div>
+            <div className="flex gap-2">
+              {editable ? (
+                <>
+                  <Button variant="outline" asChild><Link href={`/recipes/compositions/${id}/edit`}>Edytuj</Link></Button>
+                  <form action={deleteRecipeFormAction}>
+                    <input type="hidden" name="id" value={id} />
+                    <Button type="submit" variant="ghost" className="text-destructive">Usuń</Button>
+                  </form>
+                </>
+              ) : null}
+              <Button variant="outline" asChild><Link href="/recipes">Powrót</Link></Button>
+            </div>
+          </div>
+          {composition.recipe.description ? <p className="text-muted-foreground">{composition.recipe.description}</p> : null}
+          <CompositionBuilder
+            compositionId={id}
+            sections={composition.sections}
+            sources={sources}
+            today={formatDateISO(new Date())}
+          />
+        </div>
+      </DashboardShell>
+    );
+  }
+
+  const nutrition = await getRecipeNutritionAction(id);
 
   return (
     <DashboardShell>

@@ -223,6 +223,7 @@ export function BarcodeScannerFlow({
   const controlsRef = useRef<IScannerControls | null>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const lastSentRef = useRef<string | null>(null);
+  const lookupRequestRef = useRef(0);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState(initialBarcode ?? "");
@@ -250,6 +251,7 @@ export function BarcodeScannerFlow({
 
   useEffect(() => {
     return () => {
+      lookupRequestRef.current += 1;
       controlsRef.current?.stop();
       controlsRef.current = null;
       readerRef.current = null;
@@ -267,8 +269,10 @@ export function BarcodeScannerFlow({
   }, [lookupBarcode, manualBarcode, manualMode, result]);
 
   async function runLookup(barcode: string, refresh = false) {
+    const requestId = ++lookupRequestRef.current;
     setLoading(true);
     setLookupError(null);
+    setResult(null);
     setManualMode(false);
     try {
       const response = await fetch(
@@ -276,6 +280,7 @@ export function BarcodeScannerFlow({
         { cache: "no-store" },
       );
       const payload = (await response.json()) as LookupResponse & { error?: string; message?: string };
+      if (requestId !== lookupRequestRef.current) return;
       if (response.status === 404 && payload.status === "not_found") {
         setResult({ status: "not_found" });
         setManualMode(false);
@@ -288,17 +293,25 @@ export function BarcodeScannerFlow({
       setResult(payload);
       setDraft({});
     } catch (error) {
+      if (requestId !== lookupRequestRef.current) return;
       setResult(null);
       setLookupError(error instanceof Error ? error.message : "Nie udało się pobrać produktu");
     } finally {
-      setLoading(false);
+      if (requestId === lookupRequestRef.current) setLoading(false);
     }
   }
 
   async function startCamera() {
+    stopCamera();
     setCameraError(null);
+    lastSentRef.current = null;
     setCameraActive(true);
     try {
+      // The preview is rendered conditionally, so give React a frame to mount it
+      // before ZXing tries to attach the camera stream.
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const video = videoRef.current;
+      if (!video) throw new Error("Brak elementu podglądu aparatu");
       readerRef.current = createBarcodeReader();
       controlsRef.current = await readerRef.current.decodeFromConstraints(
         {
@@ -310,7 +323,7 @@ export function BarcodeScannerFlow({
             frameRate: { ideal: 30, max: 60 },
           },
         },
-        videoRef.current!,
+        video,
         (decoded, error) => {
           if (decoded) {
             const barcode = decoded.getText();
@@ -344,6 +357,9 @@ export function BarcodeScannerFlow({
         setZoomRange(null);
       }
     } catch {
+      controlsRef.current?.stop();
+      controlsRef.current = null;
+      readerRef.current = null;
       setCameraError("Brak dostępu do aparatu albo tylna kamera nie jest dostępna.");
       setCameraActive(false);
     }
@@ -446,7 +462,13 @@ export function BarcodeScannerFlow({
           {cameraActive ? (
             <div className="space-y-3">
               <div className="relative overflow-hidden rounded-lg border bg-black">
-                <video ref={videoRef} className="aspect-[4/3] w-full object-cover" muted playsInline />
+                <video
+                  ref={videoRef}
+                  className="aspect-[4/3] w-full object-cover"
+                  autoPlay
+                  muted
+                  playsInline
+                />
                 <div className="pointer-events-none absolute inset-x-[7%] top-1/2 h-[34%] -translate-y-1/2 rounded-lg border-2 border-white/90 shadow-[0_0_0_999px_rgba(0,0,0,0.2)]" />
                 <p className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs font-medium text-white drop-shadow">
                   Ustaw cały kod w ramce — poziomo lub pionowo
