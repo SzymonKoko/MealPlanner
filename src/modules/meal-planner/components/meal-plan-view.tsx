@@ -36,6 +36,7 @@ import {
 } from "@/modules/meal-planner/actions/meal-plan-actions";
 import { AddToSlotDialog, QuantityPromptDialog } from "@/modules/meal-planner/components/add-to-slot-dialog";
 import { formatPlanEntryAmount } from "@/modules/meal-planner/lib/format-entry-amount";
+import type { CompositionNutritionSource, CompositionSection } from "@/modules/recipes/components/composition-builder";
 
 type PlanViewMode = "day" | "week";
 type SourceType = "recipe" | "ingredient" | "product";
@@ -99,7 +100,8 @@ interface MealPlanViewProps {
   assignments: Assignment[];
   dayTotals: Record<string, DayTotals>;
   recipes: PaletteItem[];
-  compositions: Array<{ id: string; name: string }>;
+  compositions: Array<{ id: string; name: string; sections: CompositionSection[] }>;
+  compositionSources: CompositionNutritionSource[];
   ingredients: PaletteItem[];
   members: Member[];
   editable: boolean;
@@ -164,6 +166,7 @@ export function MealPlanView({
   dayTotals,
   recipes,
   compositions,
+  compositionSources,
   ingredients,
   members,
   editable,
@@ -481,6 +484,7 @@ export function MealPlanView({
             scope={scope}
             recipes={recipes}
             compositions={compositions}
+            compositionSources={compositionSources}
             ingredients={ingredients}
             onPick={async (kind, itemId, itemName, quantity, unit) => {
               await handleAdd(kind, itemId, pickerTarget.date, pickerTarget.mealType, itemName, quantity, unit);

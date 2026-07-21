@@ -1,7 +1,8 @@
 import { DashboardShell } from "@/components/shared/dashboard-shell";
 import { requireActiveHouseholdOrRedirect } from "@/server/require-household-member";
 import { getMealPlanForWeek } from "@/modules/meal-planner/repository/meal-plan-repository";
-import { listRecipes } from "@/modules/recipes/repository/recipe-repository";
+import { getComposition, listRecipes } from "@/modules/recipes/repository/recipe-repository";
+import { getRecipeSourceOptions } from "@/modules/recipes/services/recipe-source-options";
 import {
   listIngredients,
   listProducts,
@@ -80,6 +81,10 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
       recipes.map((recipe) => recipe.id),
     ),
     calculateNutritionPerEntry(householdId, entryNutritionSources),
+  ]);
+  const [compositionRows, compositionSources] = await Promise.all([
+    Promise.all(recipes.filter((recipe) => recipe.kind === "composition").map((recipe) => getComposition(householdId, recipe.id))),
+    getRecipeSourceOptions(householdId),
   ]);
 
   const weekDays = Array.from({ length: 7 }, (_, i) =>
@@ -204,10 +209,22 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
               kcalLabel: kcal != null ? `${Math.round(kcal)} / porcję` : null,
             };
           })}
-          compositions={recipes.filter((r) => r.kind === "composition").map((r) => ({
-            id: r.id,
-            name: r.name,
+          compositions={compositionRows.filter((item) => item !== null).map((item) => ({
+            id: item.recipe.id,
+            name: item.recipe.name,
+            sections: item.sections.map((section) => ({
+              id: section.id,
+              name: section.name,
+              options: section.options.map((option) => ({
+                id: option.id,
+                ingredientId: option.ingredientId,
+                productId: option.productId,
+                quantity: option.quantity,
+                unit: option.unit,
+              })),
+            })),
           }))}
+          compositionSources={compositionSources}
           ingredients={catalogIngredients}
           members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
           editable={editable}

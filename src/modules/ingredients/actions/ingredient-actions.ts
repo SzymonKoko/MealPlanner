@@ -543,7 +543,13 @@ export async function quickAddUsdaIngredientAction(formData: FormData) {
   return {
     id: ingredient.id,
     name: ingredient.name,
+    nutritionBasis: ingredient.nutritionBasis,
     kcalPer100: details.kcalPer100,
+    proteinPer100: details.proteinPer100,
+    carbsPer100: details.carbsPer100,
+    fatPer100: details.fatPer100,
+    fiberPer100: details.fiberPer100,
+    saltPer100: details.saltPer100,
   };
 }
 
@@ -583,5 +589,15 @@ export async function quickCreateIngredientAction(formData: FormData) {
   revalidatePath("/ingredients");
   revalidatePath("/plan");
 
-  return { id: ingredient.id, name: ingredient.name, kcalPer100: parsed.data.kcalPer100 ?? null };
+  return {
+    id: ingredient.id,
+    name: ingredient.name,
+    nutritionBasis: ingredient.nutritionBasis,
+    kcalPer100: ingredient.kcalPer100,
+    proteinPer100: ingredient.proteinPer100,
+    carbsPer100: ingredient.carbsPer100,
+    fatPer100: ingredient.fatPer100,
+    fiberPer100: ingredient.fiberPer100,
+    saltPer100: ingredient.saltPer100,
+  };
 }

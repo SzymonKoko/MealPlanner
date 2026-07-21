@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +21,8 @@ import {
 } from "@/lib/nutrition";
 import type { NutritionBasis } from "@/db/schema/ingredients";
 import { IngredientSourcePicker } from "./ingredient-source-picker";
+import { IngredientAddInSlotPanel } from "@/modules/meal-planner/components/ingredient-add-in-slot";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface RecipeSourceOption {
   id: string;
@@ -88,6 +89,8 @@ function unitLabel(unit: string) {
 
 export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
   const router = useRouter();
+  const [availableSources, setAvailableSources] = useState(sources);
+  const [ingredientDialogOpen, setIngredientDialogOpen] = useState(false);
   const [rows, setRows] = useState<RecipeIngredientRow[]>(
     initialData?.ingredients.map((item) => ({
       sourceId: item.ingredientId ?? item.productId ?? "",
@@ -105,7 +108,7 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
     const total = sumNutrition(
       rows.map((row) => {
         if (row.optional) return { ...EMPTY_NUTRITION };
-        const source = sources.find(
+        const source = availableSources.find(
           (item) => item.id === row.sourceId && item.type === row.sourceType,
         );
         if (!source) return { ...EMPTY_NUTRITION };
@@ -118,7 +121,7 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
       }),
     );
     return { values: perServing(total, servings), warning };
-  }, [rows, servings, sources]);
+  }, [availableSources, rows, servings]);
 
   function updateRow(index: number, patch: Partial<RecipeIngredientRow>) {
     setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
@@ -277,8 +280,8 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
           <CardTitle>Składniki</CardTitle>
-          <Button asChild type="button" variant="outline" size="sm">
-            <Link href="/ingredients">Nowy składnik</Link>
+          <Button type="button" variant="outline" size="sm" onClick={() => setIngredientDialogOpen(true)}>
+            Nowy składnik
           </Button>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -294,7 +297,7 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
               className="grid grid-cols-1 gap-2 rounded-lg border p-2 sm:grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_auto] sm:items-center sm:border-0 sm:p-0"
             >
               <IngredientSourcePicker
-                sources={sources}
+                sources={availableSources}
                 value={{ sourceId: row.sourceId, sourceType: row.sourceType }}
                 onChange={(next) => updateRow(index, next)}
               />
@@ -401,6 +404,37 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
       <Button type="submit" disabled={pending}>
         {pending ? "Zapisywanie..." : "Zapisz przepis"}
       </Button>
+
+      <Dialog open={ingredientDialogOpen} onOpenChange={setIngredientDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Nowy składnik</DialogTitle></DialogHeader>
+          <DialogBody>
+            <IngredientAddInSlotPanel
+              scanHref="/ingredients/scan"
+              usdaPageHref="/ingredients/usda"
+              externalToolsInNewTab
+              onCreated={(item) => {
+                setAvailableSources((current) => current.some((source) => source.id === item.id)
+                  ? current
+                  : [...current, {
+                    id: item.id,
+                    name: item.name,
+                    type: "ingredient",
+                    nutritionBasis: item.nutrition?.nutritionBasis ?? "per100g",
+                    kcalPer100: item.nutrition?.kcalPer100 ?? null,
+                    proteinPer100: item.nutrition?.proteinPer100 ?? null,
+                    carbsPer100: item.nutrition?.carbsPer100 ?? null,
+                    fatPer100: item.nutrition?.fatPer100 ?? null,
+                    fiberPer100: item.nutrition?.fiberPer100 ?? null,
+                    saltPer100: item.nutrition?.saltPer100 ?? null,
+                  }]);
+                setIngredientDialogOpen(false);
+              }}
+              onBack={() => setIngredientDialogOpen(false)}
+            />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }

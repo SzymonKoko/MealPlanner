@@ -15,6 +15,11 @@ import { MEAL_TYPE_LABELS } from "@/lib/meal-types";
 import type { MealType } from "@/db/schema/meal-planner";
 import { IngredientAddInSlotPanel } from "@/modules/meal-planner/components/ingredient-add-in-slot";
 import { buildPlanPickerReturnUrl } from "@/modules/meal-planner/lib/plan-return-url";
+import {
+  CompositionBuilder,
+  type CompositionNutritionSource,
+  type CompositionSection,
+} from "@/modules/recipes/components/composition-builder";
 
 type SourceType = "recipe" | "ingredient" | "product";
 
@@ -23,6 +28,15 @@ export interface SlotPickerItem {
   name: string;
   kind: SourceType;
   kcalLabel: string | null;
+  nutrition?: {
+    nutritionBasis: "per100g" | "per100ml";
+    kcalPer100: string | null;
+    proteinPer100: string | null;
+    carbsPer100: string | null;
+    fatPer100: string | null;
+    fiberPer100: string | null;
+    saltPer100: string | null;
+  };
 }
 
 interface AddToSlotDialogProps {
@@ -33,7 +47,8 @@ interface AddToSlotDialogProps {
   mealType: MealType;
   scope: "mine" | "household";
   recipes: SlotPickerItem[];
-  compositions: Array<{ id: string; name: string }>;
+  compositions: Array<{ id: string; name: string; sections: CompositionSection[] }>;
+  compositionSources: CompositionNutritionSource[];
   ingredients: SlotPickerItem[];
   onPick: (
     kind: SourceType,
@@ -155,6 +170,7 @@ export function AddToSlotDialog({
   scope,
   recipes,
   compositions,
+  compositionSources,
   ingredients,
   onPick,
 }: AddToSlotDialogProps) {
@@ -162,6 +178,7 @@ export function AddToSlotDialog({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [quantityItem, setQuantityItem] = useState<SlotPickerItem | null>(null);
   const [ingredientAddMode, setIngredientAddMode] = useState(false);
+  const [selectedCompositionId, setSelectedCompositionId] = useState<string | null>(null);
   const [ingredientAddSeed, setIngredientAddSeed] = useState("");
   const [quantity, setQuantity] = useState("100");
   const [unit, setUnit] = useState("g");
@@ -192,6 +209,7 @@ export function AddToSlotDialog({
     setQuery("");
     setQuantityItem(null);
     setIngredientAddMode(false);
+    setSelectedCompositionId(null);
     setIngredientAddSeed("");
     setQuantity("100");
     setUnit("g");
@@ -249,7 +267,7 @@ export function AddToSlotDialog({
         <DialogHeader className="flex items-start justify-between gap-2">
           <div>
             <DialogTitle>
-              {quantityItem ? "Ilość" : ingredientAddMode ? "Nowy składnik" : "Dodaj posiłek"}
+              {selectedCompositionId ? "Wybierz warianty" : quantityItem ? "Ilość" : ingredientAddMode ? "Nowy składnik" : "Dodaj posiłek"}
             </DialogTitle>
             <p className="mt-1 text-xs text-muted-foreground">
               {quantityItem ? quantityItem.name : `${date} · ${MEAL_TYPE_LABELS[mealType]}`}
@@ -262,7 +280,27 @@ export function AddToSlotDialog({
           </DialogClose>
         </DialogHeader>
         <DialogBody className="space-y-4">
-          {quantityItem ? (
+          {selectedCompositionId ? (() => {
+            const composition = compositions.find((item) => item.id === selectedCompositionId);
+            if (!composition) return null;
+            return (
+              <div className="space-y-3">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCompositionId(null)}>← Wstecz</Button>
+                <CompositionBuilder
+                  compositionId={composition.id}
+                  sections={composition.sections}
+                  sources={compositionSources}
+                  today={date}
+                  initialTarget={{ date, mealType, scope, returnTo: planReturnUrl }}
+                  lockTarget
+                  onAdded={() => {
+                    onOpenChange(false);
+                    reset();
+                  }}
+                />
+              </div>
+            );
+          })() : quantityItem ? (
             <form onSubmit={(event) => void handleQuantitySubmit(event)} className="space-y-4">
               <div className="flex gap-2">
                 <label className="block flex-1 space-y-1 text-sm">
@@ -327,9 +365,7 @@ export function AddToSlotDialog({
                         key={`composition-${item.id}`}
                         type="button"
                         className="flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm hover:bg-accent"
-                        onClick={() => {
-                          window.location.href = `/recipes/${item.id}?return=${encodeURIComponent(planReturnUrl)}`;
-                        }}
+                        onClick={() => setSelectedCompositionId(item.id)}
                       >
                         <span className="font-medium">{item.name}</span>
                         <span className="shrink-0 text-xs text-muted-foreground">Wybierz warianty</span>
