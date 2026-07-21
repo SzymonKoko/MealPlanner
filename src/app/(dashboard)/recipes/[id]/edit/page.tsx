@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { DashboardShell } from "@/components/shared/dashboard-shell";
 import { requireActiveHouseholdEditorOrRedirect } from "@/server/require-household-member";
 import {
@@ -28,6 +28,9 @@ export default async function EditRecipePage({ params }: EditRecipePageProps) {
     getRecipeTags(id),
   ]);
   if (!data) notFound();
+  if (data.recipe.kind === "composition") {
+    redirect(`/recipes/compositions/${id}/edit`);
+  }
   const ingredientConversions = await getIngredientUnitConversions(ingredients.map((ingredient) => ingredient.id));
   const conversionsByIngredient = new Map<string, typeof ingredientConversions>();
   for (const conversion of ingredientConversions) {

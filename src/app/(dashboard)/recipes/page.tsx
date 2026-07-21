@@ -60,10 +60,13 @@ export default async function RecipesPage({ searchParams }: RecipesPageProps) {
   return (
     <DashboardShell>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-bold">Przepisy</h1>
           {canEdit(role) ? (
-            <Button asChild><Link href="/recipes/new">Nowy przepis</Link></Button>
+            <div className="flex gap-2">
+              <Button variant="outline" asChild><Link href="/recipes/compositions/new">Nowa kompozycja</Link></Button>
+              <Button asChild><Link href="/recipes/new">Nowy przepis</Link></Button>
+            </div>
           ) : null}
         </div>
 
@@ -108,8 +111,9 @@ export default async function RecipesPage({ searchParams }: RecipesPageProps) {
                       ) : null}
                       <p className="font-medium">{recipe.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {recipe.servings} porcji
-                        {kcal != null ? ` · ${Math.round(kcal)} kcal/porcję` : ""}
+                        {recipe.kind === "composition"
+                          ? "Kompozycja · wybierz warianty"
+                          : `${recipe.servings} porcji${kcal != null ? ` · ${Math.round(kcal)} kcal/porcję` : ""}`}
                       </p>
                     </CardContent>
                   </Card>

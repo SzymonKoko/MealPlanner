@@ -194,7 +194,7 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
           entries={entries}
           assignments={assignments}
           dayTotals={dayTotals}
-          recipes={recipes.map((r) => {
+          recipes={recipes.filter((r) => r.kind === "standard").map((r) => {
             const kcal = recipeKcal.get(r.id) ?? null;
             return {
               id: r.id,

@@ -1,9 +1,14 @@
 import { db } from "@/db/client";
-import { recipes, recipeIngredients, recipeTags, ingredients, products } from "@/db/schema";
-import { and, eq, isNull, ilike, inArray } from "drizzle-orm";
+import { recipes, recipeIngredients, recipeTags, ingredients, products, compositionSections, compositionOptions } from "@/db/schema";
+import { and, eq, isNull, ilike, inArray, ne } from "drizzle-orm";
+import type { CompositionInput } from "../validators/composition-schemas";
 
 export async function listRecipes(householdId: string, search?: string) {
-  const conditions = [eq(recipes.householdId, householdId), isNull(recipes.deletedAt)];
+  const conditions = [
+    eq(recipes.householdId, householdId),
+    isNull(recipes.deletedAt),
+    ne(recipes.kind, "composition_instance" as const),
+  ];
   if (search) conditions.push(ilike(recipes.name, `%${search}%`));
 
   return db
@@ -11,6 +16,97 @@ export async function listRecipes(householdId: string, search?: string) {
     .from(recipes)
     .where(and(...conditions))
     .orderBy(recipes.name);
+}
+
+export async function getComposition(householdId: string, id: string) {
+  const recipe = await getRecipe(householdId, id);
+  if (!recipe || recipe.kind !== "composition") return null;
+  const sections = await db
+    .select()
+    .from(compositionSections)
+    .where(eq(compositionSections.recipeId, id))
+    .orderBy(compositionSections.sortOrder);
+  const options = sections.length
+    ? await db
+        .select()
+        .from(compositionOptions)
+        .where(inArray(compositionOptions.sectionId, sections.map((section) => section.id)))
+        .orderBy(compositionOptions.sortOrder)
+    : [];
+  const sourceIds = options.flatMap((option) => [option.ingredientId, option.productId]).filter(Boolean) as string[];
+  const [ingredientRows, productRows] = sourceIds.length
+    ? await Promise.all([
+        db.select().from(ingredients).where(and(inArray(ingredients.id, sourceIds), eq(ingredients.householdId, householdId))),
+        db.select().from(products).where(and(inArray(products.id, sourceIds), eq(products.householdId, householdId))),
+      ])
+    : [[], []];
+  const sourceById = new Map([...ingredientRows, ...productRows].map((source) => [source.id, source]));
+  return {
+    recipe,
+    sections: sections.map((section) => ({
+      ...section,
+      options: options
+        .filter((option) => option.sectionId === section.id)
+        .map((option) => ({ ...option, source: sourceById.get(option.ingredientId ?? option.productId ?? "") ?? null })),
+    })),
+  };
+}
+
+export async function createComposition(householdId: string, userId: string, data: CompositionInput) {
+  return db.transaction(async (tx) => {
+    const [recipe] = await tx.insert(recipes).values({
+      householdId,
+      createdBy: userId,
+      kind: "composition",
+      name: data.name,
+      description: data.description,
+      servings: 1,
+    }).returning();
+    for (const [sectionIndex, section] of data.sections.entries()) {
+      const [createdSection] = await tx.insert(compositionSections).values({
+        recipeId: recipe.id,
+        name: section.name,
+        sortOrder: section.sortOrder ?? sectionIndex,
+      }).returning();
+      await tx.insert(compositionOptions).values(section.options.map((option, optionIndex) => ({
+        sectionId: createdSection.id,
+        ingredientId: option.ingredientId ?? null,
+        productId: option.productId ?? null,
+        quantity: String(option.quantity),
+        unit: option.unit,
+        sortOrder: option.sortOrder ?? optionIndex,
+      })));
+    }
+    return recipe;
+  });
+}
+
+export async function updateComposition(householdId: string, id: string, data: CompositionInput) {
+  return db.transaction(async (tx) => {
+    const [recipe] = await tx.update(recipes).set({
+      name: data.name,
+      description: data.description,
+      updatedAt: new Date(),
+    }).where(and(eq(recipes.id, id), eq(recipes.householdId, householdId), eq(recipes.kind, "composition"))).returning();
+    if (!recipe) return null;
+    await tx.delete(compositionSections).where(eq(compositionSections.recipeId, id));
+    for (const [sectionIndex, section] of data.sections.entries()) {
+      const [createdSection] = await tx.insert(compositionSections).values({
+        recipeId: id,
+        name: section.name,
+        sortOrder: section.sortOrder ?? sectionIndex,
+      }).returning();
+      await tx.insert(compositionOptions).values(section.options.map((option, optionIndex) => ({
+        sectionId: createdSection.id,
+        ingredientId: option.ingredientId ?? null,
+        productId: option.productId ?? null,
+        quantity: String(option.quantity),
+        unit: option.unit,
+        sortOrder: option.sortOrder ?? optionIndex,
+      })));
+    }
+    return recipe;
+  });
 }
 
 export async function getRecipe(householdId: string, id: string) {
