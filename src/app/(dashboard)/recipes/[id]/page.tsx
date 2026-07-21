@@ -15,18 +15,21 @@ import { ScaledIngredientList } from "@/modules/recipes/components/scaled-ingred
 import { CompositionBuilder } from "@/modules/recipes/components/composition-builder";
 import { getRecipeSourceOptions } from "@/modules/recipes/services/recipe-source-options";
 import { formatDateISO } from "@/lib/dates";
+import { parsePlanReturnTarget } from "@/lib/return-to";
 
 interface RecipeDetailPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ return?: string }>;
 }
 
-export default async function RecipeDetailPage({ params }: RecipeDetailPageProps) {
+export default async function RecipeDetailPage({ params, searchParams }: RecipeDetailPageProps) {
   const { householdId, role } = await requireActiveHouseholdOrRedirect();
   const { id } = await params;
 
   const data = await getRecipeWithIngredients(householdId, id);
   if (!data) notFound();
   const editable = canEdit(role);
+  const returnTarget = parsePlanReturnTarget((await searchParams).return);
 
   if (data.recipe.kind === "composition") {
     const [composition, sources] = await Promise.all([
@@ -58,6 +61,12 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
             sections={composition.sections}
             sources={sources}
             today={formatDateISO(new Date())}
+            initialTarget={returnTarget ? {
+              date: returnTarget.date,
+              mealType: returnTarget.mealType,
+              scope: returnTarget.scope,
+              returnTo: returnTarget.returnTo,
+            } : undefined}
           />
         </div>
       </DashboardShell>

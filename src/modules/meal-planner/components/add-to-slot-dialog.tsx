@@ -33,6 +33,7 @@ interface AddToSlotDialogProps {
   mealType: MealType;
   scope: "mine" | "household";
   recipes: SlotPickerItem[];
+  compositions: Array<{ id: string; name: string }>;
   ingredients: SlotPickerItem[];
   onPick: (
     kind: SourceType,
@@ -153,6 +154,7 @@ export function AddToSlotDialog({
   mealType,
   scope,
   recipes,
+  compositions,
   ingredients,
   onPick,
 }: AddToSlotDialogProps) {
@@ -173,6 +175,12 @@ export function AddToSlotDialog({
     if (!q) return recipes;
     return recipes.filter((item) => item.name.toLowerCase().includes(q));
   }, [query, recipes]);
+
+  const filteredCompositions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return compositions;
+    return compositions.filter((item) => item.name.toLowerCase().includes(q));
+  }, [compositions, query]);
 
   const filteredIngredients = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -309,6 +317,27 @@ export function AddToSlotDialog({
                 placeholder="Szukaj przepisu lub składnika…"
                 autoFocus
               />
+
+              <section className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Kompozycje</p>
+                {filteredCompositions.length ? (
+                  <div className="space-y-1">
+                    {filteredCompositions.map((item) => (
+                      <button
+                        key={`composition-${item.id}`}
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm hover:bg-accent"
+                        onClick={() => {
+                          window.location.href = `/recipes/${item.id}?return=${encodeURIComponent(planReturnUrl)}`;
+                        }}
+                      >
+                        <span className="font-medium">{item.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">Wybierz warianty</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : <p className="text-sm text-muted-foreground">Brak kompozycji.</p>}
+              </section>
 
               <section className="space-y-2">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Przepisy</p>

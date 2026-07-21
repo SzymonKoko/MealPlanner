@@ -13,7 +13,7 @@ export function parsePlanReturnTarget(value: string | null | undefined) {
   const url = new URL(returnTo, "https://mealplanner.local");
   const date = url.searchParams.get("day");
   const mealType = url.searchParams.get("pick");
-  const scope = url.searchParams.get("scope") === "household" ? "household" : "mine";
+  const scope = url.searchParams.get("scope") === "household" ? "household" as const : "mine" as const;
   if (!date?.match(/^\d{4}-\d{2}-\d{2}$/)) return null;
   if (!mealType || !["breakfast", "secondBreakfast", "lunch", "snack", "dinner"].includes(mealType)) {
     return null;

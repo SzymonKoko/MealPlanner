@@ -32,6 +32,7 @@ interface IngredientAddInSlotPanelProps {
   usdaPageHref: string;
   onCreated: (item: SlotPickerItem) => void;
   onBack: () => void;
+  externalToolsInNewTab?: boolean;
 }
 
 export function IngredientAddInSlotPanel({
@@ -40,6 +41,7 @@ export function IngredientAddInSlotPanel({
   usdaPageHref,
   onCreated,
   onBack,
+  externalToolsInNewTab = false,
 }: IngredientAddInSlotPanelProps) {
   const [mode, setMode] = useState<AddMode>("chooser");
   const [pending, setPending] = useState(false);
@@ -149,7 +151,7 @@ export function IngredientAddInSlotPanel({
         <p className="text-sm text-muted-foreground">Jak chcesz dodać składnik?</p>
         <div className="grid gap-2">
           <Button asChild className="h-auto min-h-11 justify-start whitespace-normal px-4 py-3 text-left">
-            <Link href={scanHref}>
+            <Link href={scanHref} target={externalToolsInNewTab ? "_blank" : undefined} rel={externalToolsInNewTab ? "noreferrer" : undefined}>
               <span className="block font-medium">Skanuj kod</span>
               <span className="mt-0.5 block text-xs font-normal opacity-90">Produkt sklepowy (Open Food Facts)</span>
             </Link>
@@ -244,7 +246,7 @@ export function IngredientAddInSlotPanel({
             Wstecz
           </Button>
           <Button asChild type="button" variant="ghost" size="sm">
-            <Link href={usdaPageHref}>Pełna strona USDA</Link>
+            <Link href={usdaPageHref} target={externalToolsInNewTab ? "_blank" : undefined} rel={externalToolsInNewTab ? "noreferrer" : undefined}>Pełna strona USDA</Link>
           </Button>
         </div>
       </form>
