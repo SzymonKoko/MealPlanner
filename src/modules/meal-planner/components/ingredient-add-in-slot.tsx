@@ -202,7 +202,10 @@ export function IngredientAddInSlotPanel({
 
   if (mode === "manual") {
     return (
-      <form onSubmit={(event) => void handleCreateManual(event)} className="space-y-4">
+      <form onSubmit={(event) => {
+        event.stopPropagation();
+        void handleCreateManual(event);
+      }} className="space-y-4">
         <label className="block space-y-1 text-sm">
           <span className="text-muted-foreground">Nazwa składnika</span>
           <Input
@@ -245,7 +248,10 @@ export function IngredientAddInSlotPanel({
 
   return (
     <div className="space-y-4">
-      <form onSubmit={(event) => void handleUsdaSearch(event)} className="space-y-3">
+      <form onSubmit={(event) => {
+        event.stopPropagation();
+        void handleUsdaSearch(event);
+      }} className="space-y-3">
         <label className="block space-y-1 text-sm">
           <span className="text-muted-foreground">Fraza wyszukiwania (USDA)</span>
           <Input

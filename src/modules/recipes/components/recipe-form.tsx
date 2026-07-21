@@ -185,7 +185,8 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
       <Card>
         <CardHeader className="pb-3">
           <CardTitle>{initialData ? "Edytuj przepis" : "Nowy przepis"}</CardTitle>
@@ -404,6 +405,7 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
       <Button type="submit" disabled={pending}>
         {pending ? "Zapisywanie..." : "Zapisz przepis"}
       </Button>
+      </form>
 
       <Dialog open={ingredientDialogOpen} onOpenChange={setIngredientDialogOpen}>
         <DialogContent>
@@ -435,6 +437,6 @@ export function RecipeForm({ sources, tags, initialData }: RecipeFormProps) {
           </DialogBody>
         </DialogContent>
       </Dialog>
-    </form>
+    </div>
   );
 }
