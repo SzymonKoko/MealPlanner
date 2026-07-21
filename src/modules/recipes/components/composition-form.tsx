@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { RECIPE_SUPPORTED_UNITS } from "@/lib/units";
 import { createCompositionAction, updateCompositionAction } from "../actions/composition-actions";
 import { IngredientSourcePicker } from "./ingredient-source-picker";
+import { IngredientAddInSlotPanel } from "@/modules/meal-planner/components/ingredient-add-in-slot";
 
 type Source = { id: string; name: string; type: "ingredient" | "product" };
 type OptionRow = { key: string; sourceId: string; sourceType: "ingredient" | "product"; quantity: string; unit: string };
@@ -32,6 +33,8 @@ export function CompositionForm({
   }> };
 }) {
   const router = useRouter();
+  const [availableSources, setAvailableSources] = useState(sources);
+  const [addingIngredient, setAddingIngredient] = useState(false);
   const [sections, setSections] = useState<SectionRow[]>(initialData?.sections.map((section) => ({
     key: section.id,
     name: section.name,
@@ -45,6 +48,13 @@ export function CompositionForm({
   })) ?? [newSection()]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAvailableSources((current) => {
+      const known = new Set(current.map((source) => `${source.type}:${source.id}`));
+      return [...current, ...sources.filter((source) => !known.has(`${source.type}:${source.id}`))];
+    });
+  }, [sources]);
 
   function updateSection(index: number, patch: Partial<SectionRow>) {
     setSections((current) => current.map((section, i) => i === index ? { ...section, ...patch } : section));
@@ -99,6 +109,32 @@ export function CompositionForm({
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+          <div><CardTitle>Warianty</CardTitle><p className="mt-1 text-sm text-muted-foreground">Wybieraj z istniejących pozycji albo dodaj nową.</p></div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="ghost" onClick={() => router.refresh()}>Odśwież listę</Button>
+            {!addingIngredient ? <Button type="button" variant="outline" onClick={() => setAddingIngredient(true)}>+ Nowy składnik</Button> : null}
+          </div>
+        </CardHeader>
+        {addingIngredient ? (
+          <CardContent>
+            <IngredientAddInSlotPanel
+              scanHref="/ingredients/scan"
+              usdaPageHref="/ingredients/usda"
+              externalToolsInNewTab
+              onCreated={(item) => {
+                setAvailableSources((current) => current.some((source) => source.id === item.id)
+                  ? current
+                  : [...current, { id: item.id, name: item.name, type: "ingredient" }]);
+                setAddingIngredient(false);
+              }}
+              onBack={() => setAddingIngredient(false)}
+            />
+          </CardContent>
+        ) : null}
+      </Card>
+
       {sections.map((section, sectionIndex) => (
         <Card key={section.key}>
           <CardHeader className="flex flex-row items-center gap-2 space-y-0">
@@ -108,7 +144,7 @@ export function CompositionForm({
           <CardContent className="space-y-2">
             {section.options.map((option, optionIndex) => (
               <div key={option.key} className="grid gap-2 rounded-lg border p-2 sm:grid-cols-[minmax(0,1fr)_5rem_6rem_auto] sm:items-center">
-                <IngredientSourcePicker sources={sources} value={{ sourceId: option.sourceId, sourceType: option.sourceType }} onChange={(value) => updateOption(sectionIndex, optionIndex, value)} />
+                <IngredientSourcePicker sources={availableSources} value={{ sourceId: option.sourceId, sourceType: option.sourceType }} onChange={(value) => updateOption(sectionIndex, optionIndex, value)} />
                 <Input value={option.quantity} onChange={(event) => updateOption(sectionIndex, optionIndex, { quantity: event.target.value })} type="number" min="0.1" step="any" aria-label="Gramatura wariantu" required />
                 <select value={option.unit} onChange={(event) => updateOption(sectionIndex, optionIndex, { unit: event.target.value })} className="h-9 rounded-lg border bg-background px-2 text-sm" aria-label="Jednostka">
                   {RECIPE_SUPPORTED_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}

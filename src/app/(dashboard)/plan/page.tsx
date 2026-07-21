@@ -204,6 +204,10 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
               kcalLabel: kcal != null ? `${Math.round(kcal)} / porcję` : null,
             };
           })}
+          compositions={recipes.filter((r) => r.kind === "composition").map((r) => ({
+            id: r.id,
+            name: r.name,
+          }))}
           ingredients={catalogIngredients}
           members={members.map((m) => ({ userId: m.userId, displayName: m.displayName }))}
           editable={editable}

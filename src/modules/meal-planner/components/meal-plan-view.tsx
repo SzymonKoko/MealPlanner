@@ -99,6 +99,7 @@ interface MealPlanViewProps {
   assignments: Assignment[];
   dayTotals: Record<string, DayTotals>;
   recipes: PaletteItem[];
+  compositions: Array<{ id: string; name: string }>;
   ingredients: PaletteItem[];
   members: Member[];
   editable: boolean;
@@ -162,6 +163,7 @@ export function MealPlanView({
   assignments: initialAssignments,
   dayTotals,
   recipes,
+  compositions,
   ingredients,
   members,
   editable,
@@ -478,6 +480,7 @@ export function MealPlanView({
             mealType={pickerTarget.mealType}
             scope={scope}
             recipes={recipes}
+            compositions={compositions}
             ingredients={ingredients}
             onPick={async (kind, itemId, itemName, quantity, unit) => {
               await handleAdd(kind, itemId, pickerTarget.date, pickerTarget.mealType, itemName, quantity, unit);

@@ -13,6 +13,7 @@ import type { IngredientUnitConversion } from "@/lib/units";
 import { MEAL_TYPE_LABELS } from "@/lib/meal-types";
 import { calculateNutritionForQuantity, EMPTY_NUTRITION, sumNutrition } from "@/lib/nutrition";
 import { addCompositionToPlanAction } from "../actions/composition-actions";
+import { finishPlanReturnUrl } from "@/lib/return-to";
 
 type NutritionSource = {
   id: string; name: string; nutritionBasis: NutritionBasis;
@@ -28,41 +29,46 @@ export function CompositionBuilder({
   sections,
   sources,
   today,
+  initialTarget,
 }: {
   compositionId: string;
   sections: Array<{ id: string; name: string; options: Option[] }>;
   sources: NutritionSource[];
   today: string;
+  initialTarget?: { date: string; mealType: MealType; scope: "mine" | "household"; returnTo: string };
 }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<Record<string, string>>(
-    Object.fromEntries(sections.map((section) => [section.id, section.options[0]?.id ?? ""])),
+  const [selected, setSelected] = useState<Record<string, string[]>>(
+    Object.fromEntries(sections.map((section) => [section.id, section.options[0]?.id ? [section.options[0].id] : []])),
   );
-  const [date, setDate] = useState(today);
-  const [mealType, setMealType] = useState<MealType>("lunch");
-  const [scope, setScope] = useState<"mine" | "household">("mine");
+  const [date, setDate] = useState(initialTarget?.date ?? today);
+  const [mealType, setMealType] = useState<MealType>(initialTarget?.mealType ?? "lunch");
+  const [scope, setScope] = useState<"mine" | "household">(initialTarget?.scope ?? "mine");
   const [pending, setPending] = useState(false);
 
-  const nutrition = useMemo(() => sumNutrition(sections.map((section) => {
-    const option = section.options.find((item) => item.id === selected[section.id]);
-    const source = sources.find((item) => item.id === (option?.ingredientId ?? option?.productId));
-    if (!option || !source) return { ...EMPTY_NUTRITION };
-    try { return calculateNutritionForQuantity(source, option.quantity, option.unit); }
-    catch { return { ...EMPTY_NUTRITION }; }
-  })), [sections, selected, sources]);
+  const nutrition = useMemo(() => sumNutrition(sections.flatMap((section) =>
+    section.options.filter((item) => selected[section.id]?.includes(item.id)).map((option) => {
+      const source = sources.find((item) => item.id === (option.ingredientId ?? option.productId));
+      if (!source) return { ...EMPTY_NUTRITION };
+      try { return calculateNutritionForQuantity(source, option.quantity, option.unit); }
+      catch { return { ...EMPTY_NUTRITION }; }
+    }),
+  )), [sections, selected, sources]);
 
   async function addToPlan() {
     setPending(true);
     try {
       await addCompositionToPlanAction({
         compositionId,
-        optionIds: sections.map((section) => selected[section.id]).filter(Boolean),
+        optionIds: sections.flatMap((section) => selected[section.id] ?? []),
         date,
         mealType,
         planScope: scope,
       });
       toast.success("Dodano kompozycję do planera");
-      router.push(`/plan?view=day&day=${date}&scope=${scope}`);
+      router.push(initialTarget?.returnTo
+        ? finishPlanReturnUrl(initialTarget.returnTo)
+        : `/plan?view=day&day=${date}&scope=${scope}`);
       router.refresh();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Nie udało się dodać posiłku");
@@ -77,9 +83,14 @@ export function CompositionBuilder({
           <CardContent className="grid gap-2 sm:grid-cols-2">
             {section.options.map((option) => {
               const source = sources.find((item) => item.id === (option.ingredientId ?? option.productId));
-              const active = selected[section.id] === option.id;
+              const active = selected[section.id]?.includes(option.id) ?? false;
               return (
-                <button key={option.id} type="button" onClick={() => setSelected((current) => ({ ...current, [section.id]: option.id }))} className={`rounded-lg border p-3 text-left transition-colors ${active ? "border-primary bg-primary/10" : "hover:bg-accent"}`}>
+                <button key={option.id} type="button" aria-pressed={active} onClick={() => setSelected((current) => ({
+                  ...current,
+                  [section.id]: active
+                    ? (current[section.id] ?? []).filter((id) => id !== option.id)
+                    : [...(current[section.id] ?? []), option.id],
+                }))} className={`rounded-lg border p-3 text-left transition-colors ${active ? "border-primary bg-primary/10" : "hover:bg-accent"}`}>
                   <span className="font-medium">{source?.name ?? "Brakujący składnik"}</span>
                   <span className="block text-sm text-muted-foreground">{option.quantity} {option.unit}</span>
                 </button>
@@ -102,7 +113,7 @@ export function CompositionBuilder({
             <div className="space-y-1"><Label htmlFor="composition-meal">Posiłek</Label><select id="composition-meal" value={mealType} onChange={(event) => setMealType(event.target.value as MealType)} className="h-11 w-full rounded-lg border bg-background px-3">{Object.entries(MEAL_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
             <div className="space-y-1"><Label htmlFor="composition-scope">Dla kogo</Label><select id="composition-scope" value={scope} onChange={(event) => setScope(event.target.value as "mine" | "household")} className="h-11 w-full rounded-lg border bg-background px-3"><option value="mine">Tylko dla mnie</option><option value="household">Całe gospodarstwo</option></select></div>
           </div>
-          <Button onClick={() => void addToPlan()} disabled={pending || sections.some((section) => !selected[section.id])}>{pending ? "Dodawanie…" : "Dodaj do planera"}</Button>
+          <Button onClick={() => void addToPlan()} disabled={pending || sections.some((section) => !selected[section.id]?.length)}>{pending ? "Dodawanie…" : "Dodaj do planera"}</Button>
         </CardContent>
       </Card>
     </div>

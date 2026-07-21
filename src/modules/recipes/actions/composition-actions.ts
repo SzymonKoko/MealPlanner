@@ -80,12 +80,12 @@ export async function addCompositionToPlanAction(input: {
   const composition = await getComposition(householdId, parsed.data.compositionId);
   if (!composition) throw new AppError("Kompozycja nie istnieje", "NOT_FOUND", 404);
 
-  const selected = composition.sections.map((section) => {
+  const selected = composition.sections.flatMap((section) => {
     const matches = section.options.filter((option) => parsed.data.optionIds.includes(option.id));
-    if (matches.length !== 1) {
-      throw new AppError(`Wybierz jeden wariant w sekcji „${section.name}”`, "VALIDATION_ERROR");
+    if (matches.length < 1) {
+      throw new AppError(`Wybierz co najmniej jeden wariant w sekcji „${section.name}”`, "VALIDATION_ERROR");
     }
-    return matches[0];
+    return matches;
   });
   if (new Set(selected.map((option) => option.id)).size !== parsed.data.optionIds.length) {
     throw new AppError("Nieprawidłowy wariant kompozycji", "VALIDATION_ERROR");
