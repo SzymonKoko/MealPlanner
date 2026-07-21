@@ -21,6 +21,7 @@ import { pl } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MEAL_TYPE_LABELS, mealTypeEnum } from "@/lib/meal-types";
 import type { MealType } from "@/db/schema/meal-planner";
 import { toast } from "sonner";
@@ -438,6 +439,9 @@ export function MealPlanView({
           <WeekGrid
             weekDays={weekDays}
             entries={entries}
+            assignments={assignments}
+            members={members}
+            scope={scope}
             dayTotals={dayTotals}
             editable={editable}
             isDragging={isDragging}
@@ -661,6 +665,9 @@ function MealSlotMacros({ entries }: { entries: PlanEntry[] }) {
 function WeekGrid({
   weekDays,
   entries,
+  assignments,
+  members,
+  scope,
   dayTotals,
   editable,
   isDragging,
@@ -669,6 +676,9 @@ function WeekGrid({
 }: {
   weekDays: string[];
   entries: PlanEntry[];
+  assignments: Assignment[];
+  members: Member[];
+  scope: "mine" | "household";
   dayTotals: Record<string, DayTotals>;
   editable: boolean;
   isDragging: boolean;
@@ -712,7 +722,14 @@ function WeekGrid({
                   onAddClick={editable ? () => onOpenPicker(day, mealType) : undefined}
                 >
                   {cellEntries.map((entry) => (
-                    <CompactEntryChip key={entry.id} entry={entry} editable={editable} />
+                    <CompactEntryChip
+                      key={entry.id}
+                      entry={entry}
+                      assignments={assignments.filter((assignment) => assignment.mealPlanEntryId === entry.id)}
+                      members={members}
+                      editable={editable}
+                      scope={scope}
+                    />
                   ))}
                 </DroppablePlanCell>
               );
@@ -805,7 +822,20 @@ function DayDetail({
   );
 }
 
-function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boolean }) {
+function CompactEntryChip({
+  entry,
+  assignments,
+  members,
+  editable,
+  scope,
+}: {
+  entry: PlanEntry;
+  assignments: Assignment[];
+  members: Member[];
+  editable: boolean;
+  scope: "mine" | "household";
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const canEditEntry = editable && entry.editable;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `entry:${entry.id}`,
@@ -829,6 +859,19 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
     >
       <span className="min-w-0 flex-1 break-words font-medium">{entry.itemName}</span>
       {canEditEntry ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-5 px-1 text-[11px] text-muted-foreground"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => setDetailsOpen(true)}
+          aria-label={`Edytuj ${entry.itemName}`}
+        >
+          Edytuj
+        </Button>
+      ) : null}
+      {canEditEntry ? (
         <FeedbackForm
           action={deleteMealPlanEntryAction.bind(null, entry.id)}
           successMessage="Usunięto z planu"
@@ -846,6 +889,21 @@ function CompactEntryChip({ entry, editable }: { entry: PlanEntry; editable: boo
           </Button>
         </FeedbackForm>
       ) : null}
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{entry.itemName}</DialogTitle></DialogHeader>
+          <DialogBody>
+            <DetailedEntryCard
+              entry={entry}
+              assignments={assignments}
+              members={members}
+              editable={canEditEntry}
+              scope={scope}
+              initialEditing
+            />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -969,14 +1027,16 @@ function DetailedEntryCard({
   members,
   editable,
   scope,
+  initialEditing = false,
 }: {
   entry: PlanEntry;
   assignments: Assignment[];
   members: Member[];
   editable: boolean;
   scope: "mine" | "household";
+  initialEditing?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `entry:${entry.id}`,
     disabled: !editable,

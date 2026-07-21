@@ -15,6 +15,7 @@ import {
   deleteManualShoppingItemAction,
 } from "@/modules/shopping/actions/shopping-actions";
 import { SUPPORTED_UNITS } from "@/lib/units";
+import { matchesShoppingQuery } from "@/modules/shopping/lib/shopping-search";
 
 const OFFLINE_KEY = "mealplanner-shopping-offline";
 
@@ -48,6 +49,7 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
   const [items, setItems] = useState(() => mergeWithOffline(listId, initialItems));
   const [isPending, startTransition] = useTransition();
   const [lastSync, setLastSync] = useState(new Date());
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     setItems(mergeWithOffline(listId, initialItems));
@@ -116,8 +118,12 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
     });
   }
 
-  const unchecked = items.filter((i) => !i.checked);
-  const checked = items.filter((i) => i.checked);
+  const hasQuery = Boolean(query.trim());
+  const visibleItems = hasQuery
+    ? items.filter((item) => matchesShoppingQuery(item, query))
+    : items;
+  const unchecked = visibleItems.filter((i) => !i.checked);
+  const checked = visibleItems.filter((i) => i.checked);
 
   return (
     <div className="space-y-4">
@@ -125,6 +131,14 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
         Ostatnia synchronizacja: {lastSync.toLocaleTimeString("pl-PL")}
         {isPending ? " · zapisywanie..." : ""}
       </p>
+
+      <Input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Szukaj na liście zakupów…"
+        aria-label="Szukaj na liście zakupów"
+      />
 
       {editable ? (
         <FeedbackForm
@@ -151,6 +165,12 @@ export function ShoppingListView({ listId, items: initialItems, editable }: Shop
       ) : null}
 
       <GroupedItems items={unchecked} onToggle={handleToggle} editable={editable} />
+
+      {visibleItems.length === 0 && hasQuery ? (
+        <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+          Brak pozycji pasujących do „{query.trim()}”.
+        </p>
+      ) : null}
 
       {checked.length > 0 ? (
         <div className="space-y-2 border-t pt-4">
