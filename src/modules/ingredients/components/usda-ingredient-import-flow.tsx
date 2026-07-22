@@ -2,15 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   approveUsdaIngredientAction,
-  quickAddUsdaIngredientAction,
 } from "@/modules/ingredients/actions/ingredient-actions";
 import type {
   IngredientImportDto,
@@ -57,13 +54,11 @@ export function UsdaIngredientImportFlow({
   initialQuery = "",
   returnTo = null,
 }: UsdaIngredientImportFlowProps) {
-  const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
   const [translatedQuery, setTranslatedQuery] = useState(initialQuery);
   const [results, setResults] = useState<IngredientImportSearchResultDto[]>([]);
   const [selected, setSelected] = useState<IngredientImportDto | null>(null);
   const [pending, setPending] = useState(false);
-  const [addingId, setAddingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const defaultName = useMemo(() => query.trim() || selected?.name || "", [query, selected?.name]);
@@ -109,25 +104,6 @@ export function UsdaIngredientImportFlow({
       setError(detailsError instanceof Error ? detailsError.message : "Nie udało się pobrać szczegółów USDA");
     } finally {
       setPending(false);
-    }
-  }
-
-  async function handleQuickAdd(result: IngredientImportSearchResultDto) {
-    setAddingId(result.externalId);
-    setError(null);
-    try {
-      const formData = new FormData();
-      formData.set("externalId", result.externalId);
-      formData.set("name", query.trim() || result.name);
-      await quickAddUsdaIngredientAction(formData);
-      toast.success(`Dodano „${query.trim() || result.name}” do składników`);
-      router.push(returnTo ?? "/ingredients");
-    } catch (addError) {
-      const message = addError instanceof Error ? addError.message : "Nie udało się dodać składnika";
-      setError(message);
-      toast.error(message);
-    } finally {
-      setAddingId(null);
     }
   }
 
@@ -210,18 +186,11 @@ export function UsdaIngredientImportFlow({
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     type="button"
-                    onClick={() => void handleQuickAdd(result)}
-                    disabled={pending || addingId === result.externalId}
-                  >
-                    {addingId === result.externalId ? "Dodaję…" : "Dodaj"}
-                  </Button>
-                  <Button
-                    type="button"
                     variant={selected?.externalId === result.externalId ? "secondary" : "outline"}
                     onClick={() => void handleEdit(result.externalId)}
                     disabled={pending}
                   >
-                    {selected?.externalId === result.externalId ? "Edytujesz" : "Edytuj"}
+                    {selected?.externalId === result.externalId ? "Edytujesz" : "Wybierz i nazwij"}
                   </Button>
                 </div>
               </div>
