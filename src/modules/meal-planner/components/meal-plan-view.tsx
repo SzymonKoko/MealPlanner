@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { addDays, format, parseISO } from "date-fns";
 import { pl } from "date-fns/locale";
+import { GripVertical, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -850,25 +851,32 @@ function CompactEntryChip({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex items-start gap-1 rounded border bg-accent/40 px-2 py-1.5 text-xs leading-snug ${
-        canEditEntry ? "cursor-grab touch-none active:cursor-grabbing" : ""
-      }`}
+      className="group flex items-start gap-1 rounded border bg-accent/40 px-1.5 py-1.5 text-xs leading-snug"
       title={entry.itemName}
-      {...(canEditEntry ? listeners : {})}
-      {...(canEditEntry ? attributes : {})}
     >
+      {canEditEntry ? (
+        <button
+          type="button"
+          className="mt-0.5 shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+          aria-label={`Przenieś ${entry.itemName}`}
+          {...listeners}
+          {...attributes}
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
       <span className="min-w-0 flex-1 break-words font-medium">{entry.itemName}</span>
       {canEditEntry ? (
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-5 px-1 text-[11px] text-muted-foreground"
+          className="h-5 w-5 shrink-0 p-0 text-muted-foreground"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => setDetailsOpen(true)}
           aria-label={`Edytuj ${entry.itemName}`}
         >
-          Edytuj
+          <Pencil className="h-3.5 w-3.5" />
         </Button>
       ) : null}
       {canEditEntry ? (
@@ -900,6 +908,7 @@ function CompactEntryChip({
               editable={canEditEntry}
               scope={scope}
               initialEditing
+              draggable={false}
             />
           </DialogBody>
         </DialogContent>
@@ -1028,6 +1037,7 @@ function DetailedEntryCard({
   editable,
   scope,
   initialEditing = false,
+  draggable = true,
 }: {
   entry: PlanEntry;
   assignments: Assignment[];
@@ -1035,11 +1045,12 @@ function DetailedEntryCard({
   editable: boolean;
   scope: "mine" | "household";
   initialEditing?: boolean;
+  draggable?: boolean;
 }) {
   const [editing, setEditing] = useState(initialEditing);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `entry:${entry.id}`,
-    disabled: !editable,
+    id: draggable ? `entry:${entry.id}` : `entry-dialog:${entry.id}`,
+    disabled: !editable || !draggable,
   });
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -1050,12 +1061,12 @@ function DetailedEntryCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-lg border bg-accent/20 p-3 ${editable ? "touch-none" : ""}`}
+      className={`rounded-lg border bg-accent/20 p-3 ${editable && draggable ? "touch-none" : ""}`}
     >
       <div
-        className={`flex items-start justify-between gap-2 ${editable ? "cursor-grab active:cursor-grabbing" : ""}`}
-        {...(editable ? listeners : {})}
-        {...(editable ? attributes : {})}
+        className={`flex items-start justify-between gap-2 ${editable && draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+        {...(editable && draggable ? listeners : {})}
+        {...(editable && draggable ? attributes : {})}
       >
         <p className="text-base font-semibold">{entry.itemName}</p>
         <div className="flex shrink-0 gap-1" onPointerDown={(event) => event.stopPropagation()}>
