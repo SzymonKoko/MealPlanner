@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { approveImportedProductAction } from "../actions/barcode-actions";
+import { decodeBarcodeImage } from "../lib/decode-barcode-image";
 
 interface ProductSource {
   barcode: string;
@@ -58,6 +59,9 @@ function createReader() {
     BarcodeFormat.EAN_8,
     BarcodeFormat.UPC_A,
     BarcodeFormat.UPC_E,
+    BarcodeFormat.CODE_128,
+    BarcodeFormat.CODE_39,
+    BarcodeFormat.ITF,
   ]);
   hints.set(DecodeHintType.TRY_HARDER, true);
   return new BrowserMultiFormatReader(hints, {
@@ -223,10 +227,9 @@ export function BulkBarcodeScanner() {
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
       const item = initial[index];
-      const url = URL.createObjectURL(file);
       let next: BatchItem;
       try {
-        const decoded = await createReader().decodeFromImageUrl(url);
+        const decoded = await decodeBarcodeImage(createReader(), file);
         const barcode = decoded.getText();
         if (seen.has(barcode)) {
           next = { ...item, barcode, status: "error", message: "Ten kod występuje już w paczce." };
@@ -250,8 +253,6 @@ export function BulkBarcodeScanner() {
           status: "error",
           message: error instanceof Error ? error.message : "Nie udało się odczytać kodu.",
         };
-      } finally {
-        URL.revokeObjectURL(url);
       }
       completed.push(next);
       setBatch([...completed, ...initial.slice(index + 1)]);

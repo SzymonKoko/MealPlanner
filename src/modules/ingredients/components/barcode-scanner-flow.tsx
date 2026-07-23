@@ -14,6 +14,7 @@ import {
   quickAddScannedProductToPlanAction,
 } from "../actions/barcode-actions";
 import { BulkBarcodeScanner } from "./bulk-barcode-scanner";
+import { decodeBarcodeImage } from "../lib/decode-barcode-image";
 
 interface IngredientOption {
   id: string;
@@ -76,6 +77,9 @@ function createBarcodeReader() {
     BarcodeFormat.EAN_8,
     BarcodeFormat.UPC_A,
     BarcodeFormat.UPC_E,
+    BarcodeFormat.CODE_128,
+    BarcodeFormat.CODE_39,
+    BarcodeFormat.ITF,
   ]);
   hints.set(DecodeHintType.TRY_HARDER, true);
   return new BrowserMultiFormatReader(hints, {
@@ -400,9 +404,8 @@ export function BarcodeScannerFlow({
   async function scanImage(file: File) {
     setCameraError(null);
     setLookupError(null);
-    const url = URL.createObjectURL(file);
     try {
-      const resultFromImage = await createBarcodeReader().decodeFromImageUrl(url);
+      const resultFromImage = await decodeBarcodeImage(createBarcodeReader(), file);
       const barcode = resultFromImage.getText();
       setManualBarcode(barcode);
       setLookupBarcode(barcode);
@@ -410,8 +413,6 @@ export function BarcodeScannerFlow({
       await runLookup(barcode, false);
     } catch {
       setCameraError("Nie udało się odczytać kodu ze zdjęcia. Zrób ostrzejsze zdjęcie w dobrym świetle.");
-    } finally {
-      URL.revokeObjectURL(url);
     }
   }
 
