@@ -62,6 +62,9 @@ function createReader() {
     BarcodeFormat.CODE_128,
     BarcodeFormat.CODE_39,
     BarcodeFormat.ITF,
+    BarcodeFormat.CODABAR,
+    BarcodeFormat.RSS_14,
+    BarcodeFormat.RSS_EXPANDED,
   ]);
   hints.set(DecodeHintType.TRY_HARDER, true);
   return new BrowserMultiFormatReader(hints, {
