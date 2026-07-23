@@ -13,6 +13,7 @@ import {
   approveImportedProductAction,
   quickAddScannedProductToPlanAction,
 } from "../actions/barcode-actions";
+import { BulkBarcodeScanner } from "./bulk-barcode-scanner";
 
 interface IngredientOption {
   id: string;
@@ -427,6 +428,7 @@ export function BarcodeScannerFlow({
 
   return (
     <div className="space-y-6">
+      {!returnTo ? <BulkBarcodeScanner /> : null}
       <Card>
         <CardHeader><CardTitle>Skanowanie kodu</CardTitle></CardHeader>
         <CardContent className="space-y-4">
