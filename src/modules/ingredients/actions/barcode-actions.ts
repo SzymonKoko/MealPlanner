@@ -229,6 +229,9 @@ export async function approveImportedProductAction(formData: FormData) {
   revalidatePath("/ingredients");
   revalidatePath("/ingredients/scan");
   revalidatePath("/plan");
+  if (formData.get("noRedirect") === "true") {
+    return;
+  }
   const returnTo = sanitizePlanReturnTo(String(formData.get("returnTo") ?? ""));
   redirect(returnTo ?? "/ingredients");
 }

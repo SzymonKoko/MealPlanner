@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { lookupBarcodeProduct } from "./barcode-import";
+import { barcodeLookupVariants, lookupBarcodeProduct } from "./barcode-import";
 
 const state = vi.hoisted(() => ({
   localProduct: null as null | {
@@ -83,6 +83,17 @@ beforeEach(() => {
 });
 
 describe("barcode import lookup", () => {
+  it("checks equivalent UPC-A and EAN-13 representations", () => {
+    expect(barcodeLookupVariants("123456789012")).toEqual([
+      "123456789012",
+      "0123456789012",
+    ]);
+    expect(barcodeLookupVariants("0123456789012")).toEqual([
+      "0123456789012",
+      "123456789012",
+    ]);
+  });
+
   it("returns local product and skips Open Food Facts on cache hit", async () => {
     state.localProduct = {
       id: "product-1",

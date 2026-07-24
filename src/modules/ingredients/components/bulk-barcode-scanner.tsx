@@ -89,6 +89,7 @@ function getSource(result: LookupResponse): ProductSource | undefined {
 
 function productFormData(source: ProductSource) {
   const formData = new FormData();
+  formData.set("noRedirect", "true");
   if (source.id) formData.set("existingProductId", source.id);
   formData.set("barcode", source.barcode);
   formData.set("name", source.name);
