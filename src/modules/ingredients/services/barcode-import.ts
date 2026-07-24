@@ -32,6 +32,17 @@ function normalized(value: unknown) {
   return value == null || value === "" ? null : String(value);
 }
 
+export function barcodeLookupVariants(barcode: string) {
+  const normalizedBarcode = barcode.trim();
+  const variants = [normalizedBarcode];
+  if (/^\d{12}$/.test(normalizedBarcode)) {
+    variants.push(`0${normalizedBarcode}`);
+  } else if (/^0\d{12}$/.test(normalizedBarcode)) {
+    variants.push(normalizedBarcode.slice(1));
+  }
+  return variants;
+}
+
 export function compareProductWithImport(
   product: NonNullable<LocalProduct>,
   candidate: ProductImportDto,
@@ -44,26 +55,34 @@ export async function lookupBarcodeProduct(
   barcode: string,
   refresh = false,
 ): Promise<ProductImportLookupResult> {
-  const localProduct = await getProductByBarcode(householdId, barcode);
+  const variants = barcodeLookupVariants(barcode);
+  let localProduct: LocalProduct | null = null;
+  for (const variant of variants) {
+    localProduct = await getProductByBarcode(householdId, variant);
+    if (localProduct) break;
+  }
   if (localProduct && !refresh) {
     return { status: "local", product: localProduct };
   }
 
-  try {
-    const candidate = await fetchOpenFoodFactsProduct(barcode);
-    if (localProduct) {
-      return {
-        status: "external",
-        product: localProduct,
-        candidate,
-        diffs: compareProductWithImport(localProduct, candidate),
-      };
+  for (const variant of variants) {
+    try {
+      const candidate = await fetchOpenFoodFactsProduct(variant);
+      if (localProduct) {
+        return {
+          status: "external",
+          product: localProduct,
+          candidate,
+          diffs: compareProductWithImport(localProduct, candidate),
+        };
+      }
+      return { status: "external", candidate, diffs: [] };
+    } catch (error) {
+      if (error instanceof OpenFoodFactsError && error.code === "NOT_FOUND") {
+        continue;
+      }
+      throw error;
     }
-    return { status: "external", candidate, diffs: [] };
-  } catch (error) {
-    if (!localProduct && error instanceof OpenFoodFactsError && error.code === "NOT_FOUND") {
-      return { status: "not_found" };
-    }
-    throw error;
   }
+  return { status: "not_found" };
 }
